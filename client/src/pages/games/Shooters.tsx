@@ -132,7 +132,7 @@ export function Shooters({ eventId }: { eventId: string }) {
     return () => cancelAnimationFrame(raf);
   }, [user?.id]);
 
-  useResizableCanvas(canvasRef, containerRef);
+  useResizableCanvas(canvasRef, containerRef, 1.6);
   useArenaMovement(socket, canvasRef, eventId, true, false);
   useMouseAim(socket, canvasRef, eventId, stateRef, user?.id);
 

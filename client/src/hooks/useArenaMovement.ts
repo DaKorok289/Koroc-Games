@@ -10,10 +10,14 @@ import { SOCKET_EVENTS } from "@koroc/shared";
 // firing: aim is automatic (nearest visible opponent), but nothing fires unless you're
 // actively holding down (touch, left-click, or Space).
 //
-// When mouseDragMovesPlayer is false, a mouse press only fires (doesn't also drag-move)
-// — for games with a separate desktop aim scheme (useMouseAim) where WASD handles
-// movement and the mouse is dedicated to aiming. Touch is unaffected either way, since
-// there's no separate "hover" input to give aim its own channel there.
+// When mouseDragMovesPlayer is false, a mouse press only fires (doesn't also drag-move).
+// Any fire-capable game on desktop should set this: without it, holding the mouse down
+// to fire also flips on drag-movement, which then takes priority over WASD (see the
+// `dragging` check in the loop below) and drifts the player toward wherever the cursor
+// happens to sit relative to the click origin — keyboard movement looks broken/one-
+// directional until the mouse button is released. Games with a separate desktop aim
+// scheme (useMouseAim, e.g. Shooters) need this for that reason too. Touch is unaffected
+// either way, since there's no separate "hover" input to give aim its own channel there.
 export function useArenaMovement(
   socket: Socket | null,
   canvasRef: RefObject<HTMLCanvasElement | null>,

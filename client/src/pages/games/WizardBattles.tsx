@@ -127,8 +127,8 @@ export function WizardBattles({ eventId }: { eventId: string }) {
     return () => cancelAnimationFrame(raf);
   }, [user?.id]);
 
-  useResizableCanvas(canvasRef, containerRef);
-  useArenaMovement(socket, canvasRef, eventId, true);
+  useResizableCanvas(canvasRef, containerRef, 1.6);
+  useArenaMovement(socket, canvasRef, eventId, true, false);
 
   const status = displayState?.status ?? "waiting";
   const me = displayState?.players.find((p) => p.id === user?.id);

@@ -99,7 +99,7 @@ export function FourCorners({ eventId }: { eventId: string }) {
     return () => cancelAnimationFrame(raf);
   }, [user?.id]);
 
-  useResizableCanvas(canvasRef, containerRef);
+  useResizableCanvas(canvasRef, containerRef, 1.6);
   useArenaMovement(socket, canvasRef, eventId);
 
   const status = displayState?.status ?? "waiting";
