@@ -2,12 +2,14 @@ import {
   ARENA_MIN_PLAYERS,
   ARENA_MOVE_SPEED,
   ARENA_PLAYER_RADIUS,
+  HIDE_SEEK_IT_SPEED_BONUS,
   HIDE_SEEK_ROUND_SECONDS,
-  HIDE_SEEK_SEEKER_SPEED_BONUS,
+  HIDE_SEEK_TAG_IMMUNITY_MS,
   HIDE_SEEK_TAG_RADIUS,
   type HideSeekState,
   type PublicUser,
 } from "@koroc/shared";
+import { randomSpawn, resolveWallCollision } from "./arenaPhysics";
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 1000 / 30;
@@ -19,8 +21,8 @@ interface InternalPlayer {
   color: string;
   x: number;
   y: number;
-  isSeeker: boolean;
-  tagged: boolean;
+  isIt: boolean;
+  immuneUntil: number;
   dx: number;
   dy: number;
 }
@@ -28,16 +30,12 @@ interface InternalPlayer {
 type OnUpdate = (state: HideSeekState) => void;
 type OnEnd = () => void;
 
-function randomSpawn(): { x: number; y: number } {
-  return { x: Math.random() * 0.8 + 0.1, y: Math.random() * 0.8 + 0.1 };
-}
-
 export class HideAndSeekGame {
   private players = new Map<string, InternalPlayer>();
   private status: HideSeekState["status"] = "waiting";
   private countdown = COUNTDOWN_SECONDS;
   private timeRemaining = HIDE_SEEK_ROUND_SECONDS;
-  private winner: HideSeekState["winner"] = null;
+  private loser: HideSeekState["loser"] = null;
   private countdownHandle: ReturnType<typeof setInterval> | null = null;
   private loopHandle: ReturnType<typeof setInterval> | null = null;
   private lastTick = Date.now();
@@ -51,7 +49,7 @@ export class HideAndSeekGame {
 
   addParticipant(user: PublicUser, socketId: string, color: string): void {
     if (!this.players.has(socketId)) {
-      const spawn = randomSpawn();
+      const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
       this.players.set(socketId, {
         socketId,
         id: user.id,
@@ -59,8 +57,8 @@ export class HideAndSeekGame {
         color,
         x: spawn.x,
         y: spawn.y,
-        isSeeker: false,
-        tagged: false,
+        isIt: false,
+        immuneUntil: 0,
         dx: 0,
         dy: 0,
       });
@@ -74,14 +72,14 @@ export class HideAndSeekGame {
       this.stopLoop();
       this.stopCountdown();
       this.status = "waiting";
-      this.winner = null;
+      this.loser = null;
     }
     this.onUpdate(this.getState());
   }
 
   handleInput(socketId: string, dx: number, dy: number): void {
     const player = this.players.get(socketId);
-    if (!player || this.status !== "playing" || player.tagged) return;
+    if (!player || this.status !== "playing") return;
     const len = Math.hypot(dx, dy) || 1;
     player.dx = len > 1 ? dx / len : dx;
     player.dy = len > 1 ? dy / len : dy;
@@ -106,18 +104,18 @@ export class HideAndSeekGame {
 
   private beginRound(): void {
     const socketIds = Array.from(this.players.keys());
-    const seekerSocketId = socketIds[Math.floor(Math.random() * socketIds.length)];
+    const itSocketId = socketIds[Math.floor(Math.random() * socketIds.length)];
     for (const [socketId, player] of this.players) {
-      const spawn = randomSpawn();
-      player.isSeeker = socketId === seekerSocketId;
-      player.tagged = false;
+      const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
+      player.isIt = socketId === itSocketId;
+      player.immuneUntil = 0;
       player.x = spawn.x;
       player.y = spawn.y;
       player.dx = 0;
       player.dy = 0;
     }
     this.timeRemaining = HIDE_SEEK_ROUND_SECONDS;
-    this.winner = null;
+    this.loser = null;
     this.status = "playing";
     this.startLoop();
   }
@@ -149,30 +147,37 @@ export class HideAndSeekGame {
     if (this.status !== "playing") return;
 
     for (const player of this.players.values()) {
-      if (player.tagged) continue;
-      const speed = ARENA_MOVE_SPEED * (player.isSeeker ? HIDE_SEEK_SEEKER_SPEED_BONUS : 1);
-      player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, player.x + player.dx * speed * dt));
-      player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, player.y + player.dy * speed * dt));
+      const speed = ARENA_MOVE_SPEED * (player.isIt ? HIDE_SEEK_IT_SPEED_BONUS : 1);
+      const targetX = player.x + player.dx * speed * dt;
+      const targetY = player.y + player.dy * speed * dt;
+      const resolved = resolveWallCollision(player.x, player.y, targetX, targetY, ARENA_PLAYER_RADIUS);
+      player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.x));
+      player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.y));
     }
 
-    const seeker = Array.from(this.players.values()).find((p) => p.isSeeker);
-    if (seeker) {
+    // Tag transfer: whoever is "it" passes it to the first player they touch who isn't
+    // currently immune. The player who just stopped being "it" gets brief immunity so
+    // it can't be passed straight back to them.
+    const it = Array.from(this.players.values()).find((p) => p.isIt);
+    if (it) {
       for (const player of this.players.values()) {
-        if (player.isSeeker || player.tagged) continue;
-        const dist = Math.hypot(player.x - seeker.x, player.y - seeker.y);
+        if (player.isIt || now < player.immuneUntil) continue;
+        const dist = Math.hypot(player.x - it.x, player.y - it.y);
         if (dist <= HIDE_SEEK_TAG_RADIUS) {
-          player.tagged = true;
+          it.isIt = false;
+          it.immuneUntil = now + HIDE_SEEK_TAG_IMMUNITY_MS;
+          player.isIt = true;
+          break;
         }
       }
     }
 
     this.timeRemaining -= dt;
-    const allTagged = Array.from(this.players.values()).every((p) => p.isSeeker || p.tagged);
-
-    if (this.timeRemaining <= 0 || allTagged) {
-      this.status = "finished";
-      this.winner = allTagged ? "seeker" : "hiders";
+    if (this.timeRemaining <= 0) {
       this.timeRemaining = 0;
+      this.status = "finished";
+      const stillIt = Array.from(this.players.values()).find((p) => p.isIt);
+      this.loser = stillIt ? { id: stillIt.id, username: stillIt.username } : null;
       this.stopLoop();
       this.onUpdate(this.getState());
       setTimeout(() => this.onEnd(), 5000);
@@ -194,15 +199,22 @@ export class HideAndSeekGame {
         color: p.color,
         x: p.x,
         y: p.y,
-        isSeeker: p.isSeeker,
-        tagged: p.tagged,
+        isIt: p.isIt,
       })),
-      winner: this.winner,
+      loser: this.loser,
     };
   }
 
   getPlayerCount(): number {
     return this.players.size;
+  }
+
+  /** Everyone except whoever was "it" when time ran out gets credit for the win. */
+  getWinnerUserIds(): number[] {
+    if (!this.loser) return [];
+    return Array.from(this.players.values())
+      .filter((p) => p.id !== this.loser!.id)
+      .map((p) => p.id);
   }
 
   destroy(): void {

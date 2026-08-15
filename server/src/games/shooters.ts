@@ -16,7 +16,7 @@ import {
   type ShooterState,
   type ShooterTracer,
 } from "@koroc/shared";
-import { bushAt, isVisible, raycastHit, resolveWallCollision } from "./arenaPhysics";
+import { bushAt, isVisible, randomSpawn, raycastHit, resolveWallCollision } from "./arenaPhysics";
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 1000 / 30;
@@ -45,10 +45,6 @@ interface InternalPlayer {
 
 type OnEnd = () => void;
 
-function randomSpawn(): { x: number; y: number } {
-  return { x: Math.random() * 0.8 + 0.1, y: Math.random() * 0.8 + 0.1 };
-}
-
 export class ShooterGame {
   private players = new Map<string, InternalPlayer>();
   private tracers: ShooterTracer[] = [];
@@ -70,7 +66,7 @@ export class ShooterGame {
 
   addParticipant(user: PublicUser, socketId: string, color: string): void {
     if (!this.players.has(socketId)) {
-      const spawn = randomSpawn();
+      const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
       this.players.set(socketId, {
         socketId,
         id: user.id,
@@ -127,6 +123,15 @@ export class ShooterGame {
     player.firing = firing;
   }
 
+  /** Explicit aim override (e.g. mouse cursor direction on desktop), independent of movement. */
+  setAim(socketId: string, dx: number, dy: number): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    const len = Math.hypot(dx, dy) || 1;
+    player.facingDx = dx / len;
+    player.facingDy = dy / len;
+  }
+
   /** Admin-triggered: begins the countdown once enough players have joined. */
   requestStart(): boolean {
     if (this.status !== "waiting" || this.players.size < ARENA_MIN_PLAYERS) return false;
@@ -146,7 +151,7 @@ export class ShooterGame {
 
   private beginRound(): void {
     for (const player of this.players.values()) {
-      const spawn = randomSpawn();
+      const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
       player.hp = SHOOTER_HP_START;
       player.kills = 0;
       player.alive = true;
@@ -197,7 +202,7 @@ export class ShooterGame {
 
     for (const player of this.players.values()) {
       if (!player.alive && now >= player.respawnAt) {
-        const spawn = randomSpawn();
+        const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
         player.alive = true;
         player.hp = SHOOTER_HP_START;
         player.x = spawn.x;
@@ -319,6 +324,10 @@ export class ShooterGame {
 
   getPlayerCount(): number {
     return this.players.size;
+  }
+
+  getWinnerUserIds(): number[] {
+    return this.winner ? [this.winner.id] : [];
   }
 
   destroy(): void {

@@ -13,7 +13,7 @@ import {
   type WizardBattleState,
   type WizardBolt,
 } from "@koroc/shared";
-import { bushAt, hasLineOfSight, isVisible, resolveWallCollision } from "./arenaPhysics";
+import { bushAt, hasLineOfSight, isVisible, randomSpawn, resolveWallCollision } from "./arenaPhysics";
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 1000 / 30;
@@ -40,10 +40,6 @@ interface InternalPlayer {
 
 type OnEnd = () => void;
 
-function randomSpawn(): { x: number; y: number } {
-  return { x: Math.random() * 0.8 + 0.1, y: Math.random() * 0.8 + 0.1 };
-}
-
 export class WizardBattleGame {
   private players = new Map<string, InternalPlayer>();
   private bolts: WizardBolt[] = [];
@@ -66,7 +62,7 @@ export class WizardBattleGame {
 
   addParticipant(user: PublicUser, socketId: string, color: string): void {
     if (!this.players.has(socketId)) {
-      const spawn = randomSpawn();
+      const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
       this.players.set(socketId, {
         socketId,
         id: user.id,
@@ -121,6 +117,15 @@ export class WizardBattleGame {
     player.firing = firing;
   }
 
+  /** Explicit aim override (e.g. mouse cursor direction on desktop), independent of movement. */
+  setAim(socketId: string, dx: number, dy: number): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    const len = Math.hypot(dx, dy) || 1;
+    player.facingDx = dx / len;
+    player.facingDy = dy / len;
+  }
+
   /** Admin-triggered: begins the countdown once enough players have joined. */
   requestStart(): boolean {
     if (this.status !== "waiting" || this.players.size < ARENA_MIN_PLAYERS) return false;
@@ -140,7 +145,7 @@ export class WizardBattleGame {
 
   private beginRound(): void {
     for (const player of this.players.values()) {
-      const spawn = randomSpawn();
+      const spawn = randomSpawn(ARENA_PLAYER_RADIUS);
       player.hp = WIZARD_HP_START;
       player.alive = true;
       player.x = spawn.x;
@@ -298,6 +303,10 @@ export class WizardBattleGame {
 
   getPlayerCount(): number {
     return this.players.size;
+  }
+
+  getWinnerUserIds(): number[] {
+    return this.winner ? [this.winner.id] : [];
   }
 
   destroy(): void {

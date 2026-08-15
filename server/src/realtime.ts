@@ -11,6 +11,7 @@ import {
   type PublicUser,
 } from "@koroc/shared";
 import { AUTH_COOKIE, parseUserFromToken } from "./auth";
+import { getLeaderboard, recordWin } from "./db";
 import { PongTournament } from "./games/pongTournament";
 import { HideAndSeekGame } from "./games/hideAndSeek";
 import { WizardBattleGame } from "./games/wizardBattles";
@@ -74,6 +75,7 @@ export function registerRealtime(io: Server): void {
     const user = s.data.user;
     connectedUsers.set(socket.id, user);
     io.emit(SOCKET_EVENTS.LOBBY_STATE, lobbyState());
+    socket.emit(SOCKET_EVENTS.LEADERBOARD_STATE, getLeaderboard());
 
     socket.on(SOCKET_EVENTS.ADMIN_START_EVENT, (payload: { gameType: GameType }) => {
       if (!user.isAdmin) {
@@ -200,6 +202,16 @@ export function registerRealtime(io: Server): void {
       }
     });
 
+    // Explicit aim override (e.g. mouse cursor direction on desktop) — independent of
+    // movement, which is why it's a separate event from ARENA_INPUT.
+    socket.on(SOCKET_EVENTS.ARENA_AIM, (payload: { eventId: string; dx: number; dy: number }) => {
+      const entry = events.get(payload?.eventId);
+      if (!entry || typeof payload?.dx !== "number" || typeof payload?.dy !== "number") return;
+      if (entry.game instanceof WizardBattleGame || entry.game instanceof ShooterGame) {
+        entry.game.setAim(socket.id, payload.dx, payload.dy);
+      }
+    });
+
     socket.on("disconnect", () => {
       connectedUsers.delete(socket.id);
       const eventId = socketEventId.get(socket.id);
@@ -215,6 +227,9 @@ export function registerRealtime(io: Server): void {
 function endEvent(io: Server, eventId: string): void {
   const entry = events.get(eventId);
   if (!entry) return;
+  const winnerIds = entry.game.getWinnerUserIds();
+  for (const userId of winnerIds) recordWin(userId, entry.meta.gameType);
+  if (winnerIds.length > 0) io.emit(SOCKET_EVENTS.LEADERBOARD_STATE, getLeaderboard());
   entry.game.destroy();
   events.delete(eventId);
   io.to(room(eventId)).emit(SOCKET_EVENTS.EVENT_ENDED, { eventId });

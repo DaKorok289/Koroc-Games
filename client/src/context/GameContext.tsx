@@ -5,6 +5,7 @@ import {
   defaultColorForUser,
   type ActiveEvent,
   type GameType,
+  type LeaderboardEntry,
   type PublicUser,
 } from "@koroc/shared";
 import { useAuth } from "./AuthContext";
@@ -19,6 +20,7 @@ interface GameContextValue {
   errorMessage: string | null;
   myColor: string;
   setMyColor: (color: string) => void;
+  leaderboard: LeaderboardEntry[];
   startEvent: (gameType: GameType) => void;
   joinEvent: (eventId: string) => void;
   leaveEvent: () => void;
@@ -38,6 +40,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<ActiveEvent[]>([]);
   const [myEventId, setMyEventId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [myColor, setMyColorState] = useState<string>(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(COLOR_STORAGE_KEY) : null;
     if (stored && (PLAYER_COLOR_PRESETS as readonly string[]).includes(stored)) return stored;
@@ -58,15 +61,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setErrorMessage(payload.message);
       setTimeout(() => setErrorMessage(null), 4000);
     };
+    const onLeaderboard = (entries: LeaderboardEntry[]) => setLeaderboard(entries);
 
     socket.on(SOCKET_EVENTS.LOBBY_STATE, onLobbyState);
     socket.on(SOCKET_EVENTS.EVENT_ENDED, onEventEnded);
     socket.on(SOCKET_EVENTS.ERROR, onError);
+    socket.on(SOCKET_EVENTS.LEADERBOARD_STATE, onLeaderboard);
 
     return () => {
       socket.off(SOCKET_EVENTS.LOBBY_STATE, onLobbyState);
       socket.off(SOCKET_EVENTS.EVENT_ENDED, onEventEnded);
       socket.off(SOCKET_EVENTS.ERROR, onError);
+      socket.off(SOCKET_EVENTS.LEADERBOARD_STATE, onLeaderboard);
     };
   }, [socket]);
 
@@ -95,6 +101,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       errorMessage,
       myColor,
       setMyColor,
+      leaderboard,
       startEvent: (gameType) => socket?.emit(SOCKET_EVENTS.ADMIN_START_EVENT, { gameType }),
       joinEvent: (eventId) => {
         socket?.emit(SOCKET_EVENTS.GAME_JOIN, { eventId }, () => setMyEventId(eventId));
@@ -107,7 +114,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       endEvent: (eventId) => socket?.emit(SOCKET_EVENTS.ADMIN_END_EVENT, { eventId }),
       startMatch: (eventId) => socket?.emit(SOCKET_EVENTS.ADMIN_START_MATCH, { eventId }),
     }),
-    [users, events, myEventId, errorMessage, myColor, socket],
+    [users, events, myEventId, errorMessage, myColor, leaderboard, socket],
   );
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

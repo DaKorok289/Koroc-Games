@@ -15,6 +15,13 @@ db.exec(`
     is_admin INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS wins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    game_type TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 export interface UserRow {
@@ -44,6 +51,29 @@ export function createUser(username: string, passwordHash: string, salt: string,
     .prepare("INSERT INTO users (username, password_hash, salt, is_admin) VALUES (?, ?, ?, ?)")
     .run(username, passwordHash, salt, isAdmin ? 1 : 0);
   return findUserById(Number(info.lastInsertRowid))!;
+}
+
+export function recordWin(userId: number, gameType: string): void {
+  db.prepare("INSERT INTO wins (user_id, game_type) VALUES (?, ?)").run(userId, gameType);
+}
+
+export interface LeaderboardRow {
+  userId: number;
+  username: string;
+  wins: number;
+}
+
+export function getLeaderboard(): LeaderboardRow[] {
+  return db
+    .prepare(
+      `SELECT users.id as userId, users.username as username, COUNT(wins.id) as wins
+       FROM users
+       LEFT JOIN wins ON wins.user_id = users.id
+       GROUP BY users.id
+       HAVING wins > 0
+       ORDER BY wins DESC, users.username ASC`,
+    )
+    .all() as LeaderboardRow[];
 }
 
 // Promotes usernames listed in ADMIN_USERNAMES (comma-separated) to admin on every

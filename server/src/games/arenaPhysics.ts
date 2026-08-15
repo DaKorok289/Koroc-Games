@@ -8,6 +8,18 @@ function circleIntersectsRect(cx: number, cy: number, radius: number, rect: Aren
   return dx * dx + dy * dy < radius * radius;
 }
 
+/** Random spawn point that never lands inside (or overlapping) a wall. */
+export function randomSpawn(radius: number): { x: number; y: number } {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const x = Math.random() * 0.8 + 0.1;
+    const y = Math.random() * 0.8 + 0.1;
+    if (!ARENA_WALLS.some((wall) => circleIntersectsRect(x, y, radius, wall))) {
+      return { x, y };
+    }
+  }
+  return { x: 0.5, y: 0.5 }; // fallback — center is clear in the current layout
+}
+
 /** Axis-separated sliding collision: try the full move, then X-only, then Y-only. */
 export function resolveWallCollision(
   x: number,

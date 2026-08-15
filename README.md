@@ -6,20 +6,25 @@ players choose which to join rather than getting yanked into one automatically. 
 TypeScript end to end.
 
 - **Ping Pong** — single-elimination bracket tournament (any number of players, byes handled
-  automatically), matches play one at a time with a live bracket view
-- **Hide & Seek** — one random seeker (slightly faster) tags hiders by proximity; hiders win
-  by surviving the clock
+  automatically), matches play one at a time with a live bracket view. On desktop the paddle
+  just follows your mouse cursor (no click needed); touch still drags.
+- **Tag** — one player starts "it"; tagging passes it to them (with brief immunity so it can't
+  be passed straight back). Obstacles block movement. Whoever's it when the 3-minute clock
+  runs out loses.
 - **Wizard Battles** — free movement, cast toward wherever you're facing (aim is directional,
   not automatic); walls block sight and bushes hide you; limited charges before a recharge
   pause; last wizard standing wins
 - **Shooters** — free movement, hitscan fire toward wherever you're facing, respawns on death;
   walls and bushes work the same as Wizard Battles; limited ammo before a reload pause; first
-  to 5 kills wins
+  to 5 kills wins. On desktop, aim independently follows your mouse cursor while WASD handles
+  movement (a proper twin-stick-style setup); touch uses the unified drag-to-move-and-aim
+  scheme.
 
 Every game is admin-controlled: the admin who started it decides when it actually begins (so
 they can wait for more sign-ups), every game screen supports a fullscreen toggle plus canvases
-that scale to fill the available screen without ever needing to scroll, and players can pick
-their own character color from the lobby.
+that scale to fill the available screen without ever needing to scroll, players can pick their
+own character color from the lobby, and a persistent **Leaderboard** tab tracks wins across
+every game.
 
 ## Stack
 
@@ -71,17 +76,19 @@ config is needed for LAN play.
   from round 2 onward gets two real players) and plays matches sequentially, advancing winners
   up the bracket automatically. Non-current-match players see a live bracket tree; the two
   current players get full paddle control, matching Ping Pong's original controls.
-- **Hide & Seek / Wizard Battles / Shooters**: all three share a normalized 0..1 x 0..1 arena
-  and the same movement model (server-authoritative, 30fps tick) — drag anywhere on the arena
-  or use WASD/arrow keys to move. Everyone who joins becomes a player (no spectator role); a
-  round needs at least 2 players before the admin can start it.
-- **Combat (Wizard Battles / Shooters)**: aim is directional, not automatic — whichever way
-  you're currently moving/facing is where you cast or fire. Nothing fires on its own: you must
-  actively hold down (touch, left-click, or Space) to attack, and each hit consumes one
-  charge/ammo from a small limit (`WIZARD_MAX_CHARGES` / `SHOOTER_MAX_AMMO`) before a forced
-  recharge/reload pause. Wizard bolts are simulated projectiles (travel + collide each tick);
-  Shooters use an instant closest-hit raycast (`raycastHit` in `arenaPhysics.ts`) along the
-  facing direction.
+- **Tag / Wizard Battles / Shooters**: all three share a normalized 0..1 x 0..1 arena and the
+  same movement model (server-authoritative, 30fps tick) — drag anywhere on the arena or use
+  WASD/arrow keys to move. Spawns always avoid landing inside a wall (`randomSpawn` in
+  `arenaPhysics.ts` retries until it finds a clear spot). Everyone who joins becomes a player
+  (no spectator role); a round needs at least 2 players before the admin can start it.
+- **Combat (Wizard Battles / Shooters)**: aim is directional, not automatic. On touch it
+  follows your movement drag; on desktop it independently follows your mouse cursor
+  (`useMouseAim`, a separate `arena:aim` event from movement) while WASD still drives
+  movement. Nothing fires on its own: you must actively hold down (touch, left-click, or
+  Space) to attack, and each hit consumes one charge/ammo from a small limit
+  (`WIZARD_MAX_CHARGES` / `SHOOTER_MAX_AMMO`) before a forced recharge/reload pause. Wizard
+  bolts are simulated projectiles (travel + collide each tick); Shooters use an instant
+  closest-hit raycast (`raycastHit` in `arenaPhysics.ts`) along the facing direction.
 - **Walls, bushes & line of sight (Wizard Battles / Shooters)**: `ARENA_WALLS`/`ARENA_BUSHES` in
   `shared/src/index.ts` define a shared map. Walls block movement (axis-separated sliding
   collision — you slide along a wall instead of stopping dead), sight (segment-vs-rectangle
@@ -90,10 +97,15 @@ config is needed for LAN play.
   bush — you can always see yourself. This is enforced server-side: each client receives its
   own personalized, visibility-filtered player list (`io.to(socketId).emit(...)` per
   participant, not a single broadcast), so a hidden player can't be found by inspecting
-  network traffic either.
+  network traffic either. Visibility rules only apply once a round is actually playing — the
+  pre-game roster and post-game results always show everyone.
 - **Character color**: pick from a small preset palette via the swatch button in the lobby
   header. Persisted in `localStorage` and re-sent to the server on every connect (colors are
   tracked in memory only), then shown on your character in every arena game.
+- **Leaderboard**: every game reports its winner(s) to `server/src/db.ts` (a `wins` table) the
+  moment its event ends — Ping Pong credits the tournament champion, Tag credits everyone
+  except whoever was "it", Wizard Battles/Shooters credit the last one standing. The lobby's
+  Leaderboard tab shows the live, sorted total via a `leaderboard:state` broadcast.
 - **Granting admin on a deployed instance**: set an `ADMIN_USERNAMES` env var (comma-separated
   usernames) on the host. Promotion runs on every server startup, so it takes effect on the
   next deploy/restart — no direct database access needed.

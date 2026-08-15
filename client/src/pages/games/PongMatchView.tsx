@@ -73,6 +73,8 @@ export function PongMatchView({
 
   useResizableCanvas(canvasRef, containerRef, 5 / 3);
 
+  // Touch: drag on the canvas to move the paddle (no continuous "hover" on touchscreens,
+  // so dragging is the only option there).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !socket) return;
@@ -85,6 +87,7 @@ export function PongMatchView({
 
     let dragging = false;
     const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") return; // desktop uses free cursor-follow instead
       if (roleRef.current !== "left" && roleRef.current !== "right") return;
       dragging = true;
       sendPaddleY(e.clientY);
@@ -105,6 +108,22 @@ export function PongMatchView({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
+  }, [socket, eventId]);
+
+  // Desktop: paddle just follows the mouse cursor's Y position, no click needed.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !socket) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (roleRef.current !== "left" && roleRef.current !== "right") return;
+      const rect = canvas.getBoundingClientRect();
+      const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+      socket.emit(SOCKET_EVENTS.PONG_INPUT, { eventId, paddleY: y });
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    return () => window.removeEventListener("mousemove", onMouseMove);
   }, [socket, eventId]);
 
   useEffect(() => {
@@ -159,7 +178,7 @@ export function PongMatchView({
 
       <p className="pong-role">
         {role === "left" || role === "right"
-          ? "You're playing! Drag on the canvas or use W/S / Arrow keys."
+          ? "You're playing! Paddle follows your mouse cursor, or drag on touch, or use W/S / Arrow keys."
           : "You're spectating this match."}
       </p>
     </div>

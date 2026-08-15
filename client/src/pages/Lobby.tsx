@@ -6,8 +6,8 @@ import { ColorPicker } from "../components/ColorPicker";
 
 export function Lobby() {
   const { user, logout } = useAuth();
-  const { users, events, startEvent, joinEvent, errorMessage } = useGame();
-  const [tab, setTab] = useState<"join" | "minigames">("join");
+  const { users, events, startEvent, joinEvent, errorMessage, leaderboard } = useGame();
+  const [tab, setTab] = useState<"join" | "minigames" | "leaderboard">("join");
 
   return (
     <div className="lobby-screen">
@@ -52,6 +52,13 @@ export function Lobby() {
               type="button"
             >
               Minigames
+            </button>
+            <button
+              className={tab === "leaderboard" ? "tab active" : "tab"}
+              onClick={() => setTab("leaderboard")}
+              type="button"
+            >
+              Leaderboard
             </button>
           </div>
 
@@ -108,6 +115,29 @@ export function Lobby() {
                 Starting an event doesn't join you to it automatically — switch to "Join Games" (or click Join
                 right after starting) to actually play.
               </p>
+            </>
+          )}
+
+          {tab === "leaderboard" && (
+            <>
+              {leaderboard.length === 0 ? (
+                <p className="hint">No wins recorded yet — finish a game to get on the board.</p>
+              ) : (
+                <ol className="leaderboard-list">
+                  {leaderboard.map((entry, i) => (
+                    <li key={entry.userId} className={entry.userId === user?.id ? "you" : undefined}>
+                      <span className="leaderboard-rank">#{i + 1}</span>
+                      <span className="leaderboard-name">
+                        {entry.username}
+                        {entry.userId === user?.id ? " (you)" : ""}
+                      </span>
+                      <span className="leaderboard-wins">
+                        {entry.wins} {entry.wins === 1 ? "win" : "wins"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </>
           )}
         </section>

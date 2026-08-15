@@ -11,8 +11,8 @@ export const GAME_INFO: Record<GameType, { label: string; description: string; i
     implemented: true,
   },
   "hide-and-seek": {
-    label: "Hide & Seek",
-    description: "One seeker, everyone else hides. Survive the clock to win.",
+    label: "Tag",
+    description: "Tag passes to whoever's touched. Whoever's it when the 3-minute clock runs out loses.",
     implemented: true,
   },
   "wizard-battles": {
@@ -36,6 +36,12 @@ export interface PublicUser {
 export interface LobbyState {
   users: PublicUser[];
   events: ActiveEvent[];
+}
+
+export interface LeaderboardEntry {
+  userId: number;
+  username: string;
+  wins: number;
 }
 
 export interface ActiveEvent {
@@ -151,15 +157,17 @@ export function defaultColorForUser(userId: number): string {
   return PLAYER_COLOR_PRESETS[userId % PLAYER_COLOR_PRESETS.length];
 }
 
-// -- Hide & Seek --
+// -- Tag --
+// One player starts "it"; tagging someone passes it to them (with brief immunity for
+// the player who just stopped being it, so it can't be instantly passed straight back).
+// Obstacles block movement. Whoever is it when the clock runs out loses.
 
 export interface HideSeekPlayer {
   id: number;
   username: string;
   x: number;
   y: number;
-  isSeeker: boolean;
-  tagged: boolean;
+  isIt: boolean;
   color: string;
 }
 
@@ -169,12 +177,13 @@ export interface HideSeekState {
   timeRemaining: number;
   roundSeconds: number;
   players: HideSeekPlayer[];
-  winner: "seeker" | "hiders" | null;
+  loser: ArenaWinner | null;
 }
 
-export const HIDE_SEEK_ROUND_SECONDS = 45;
+export const HIDE_SEEK_ROUND_SECONDS = 180; // 3 minutes
 export const HIDE_SEEK_TAG_RADIUS = 0.045;
-export const HIDE_SEEK_SEEKER_SPEED_BONUS = 1.15; // seeker moves slightly faster
+export const HIDE_SEEK_IT_SPEED_BONUS = 1.15; // "it" moves slightly faster
+export const HIDE_SEEK_TAG_IMMUNITY_MS = 1500; // can't be immediately tagged back
 
 // -- Wizard Battles --
 
@@ -278,9 +287,11 @@ export const SOCKET_EVENTS = {
   PONG_TOURNAMENT_STATE: "pong:tournamentState",
   ARENA_INPUT: "arena:input",
   ARENA_FIRE: "arena:fire",
+  ARENA_AIM: "arena:aim",
   SET_COLOR: "player:setColor",
   HIDE_SEEK_STATE: "hideSeek:state",
   WIZARD_STATE: "wizard:state",
   SHOOTER_STATE: "shooter:state",
+  LEADERBOARD_STATE: "leaderboard:state",
   ERROR: "server:error",
 } as const;

@@ -9,11 +9,17 @@ import { SOCKET_EVENTS } from "@koroc/shared";
 // When hasFireAction is set (Wizard Battles, Shooters), the same press also toggles
 // firing: aim is automatic (nearest visible opponent), but nothing fires unless you're
 // actively holding down (touch, left-click, or Space).
+//
+// When mouseDragMovesPlayer is false, a mouse press only fires (doesn't also drag-move)
+// — for games with a separate desktop aim scheme (useMouseAim) where WASD handles
+// movement and the mouse is dedicated to aiming. Touch is unaffected either way, since
+// there's no separate "hover" input to give aim its own channel there.
 export function useArenaMovement(
   socket: Socket | null,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   eventId: string,
   hasFireAction = false,
+  mouseDragMovesPlayer = true,
 ): void {
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -44,20 +50,22 @@ export function useArenaMovement(
     };
 
     const onPointerDown = (e: PointerEvent) => {
+      sendFiring(true);
+      if (e.pointerType === "mouse" && !mouseDragMovesPlayer) return; // fire only, don't drag-move
       dragging = true;
       originX = e.clientX;
       originY = e.clientY;
-      sendFiring(true);
     };
     const onPointerMove = (e: PointerEvent) => {
       if (!dragging) return;
       const { dx, dy } = vectorFrom(e.clientX, e.clientY);
       send(dx, dy);
     };
-    const onPointerUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
+      sendFiring(false);
+      if (e.pointerType === "mouse" && !mouseDragMovesPlayer) return; // this pointer never drove movement
       dragging = false;
       send(0, 0);
-      sendFiring(false);
     };
 
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -103,5 +111,5 @@ export function useArenaMovement(
       socket.emit(SOCKET_EVENTS.ARENA_INPUT, { eventId, dx: 0, dy: 0 });
       sendFiring(false);
     };
-  }, [socket, canvasRef, eventId, hasFireAction]);
+  }, [socket, canvasRef, eventId, hasFireAction, mouseDragMovesPlayer]);
 }

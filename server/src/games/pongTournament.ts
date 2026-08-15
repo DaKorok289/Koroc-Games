@@ -220,6 +220,10 @@ export class PongTournament {
     return this.roster.size;
   }
 
+  getWinnerUserIds(): number[] {
+    return this.champion ? [this.champion.id] : [];
+  }
+
   destroy(): void {
     this.currentMatch?.destroy();
     this.currentMatch = null;

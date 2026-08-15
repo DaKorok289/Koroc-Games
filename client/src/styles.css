@@ -275,6 +275,47 @@ input:focus {
   color: var(--accent);
 }
 
+.leaderboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 480px;
+}
+
+.leaderboard-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.leaderboard-list li.you {
+  border-color: var(--accent);
+}
+
+.leaderboard-rank {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  width: 2.5rem;
+}
+
+.leaderboard-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.leaderboard-wins {
+  color: var(--accent-2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .start-match-control {
   display: flex;
   align-items: center;

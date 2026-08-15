@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useGame } from "../../context/GameContext";
 import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
+import { useMouseAim } from "../../hooks/useMouseAim";
 import { PlayerRoster } from "../../components/PlayerRoster";
 import { StartMatchControl } from "../../components/StartMatchControl";
 
@@ -130,7 +131,8 @@ export function Shooters({ eventId }: { eventId: string }) {
   }, [user?.id]);
 
   useResizableCanvas(canvasRef, containerRef);
-  useArenaMovement(socket, canvasRef, eventId, true);
+  useArenaMovement(socket, canvasRef, eventId, true, false);
+  useMouseAim(socket, canvasRef, eventId, stateRef, user?.id);
 
   const status = displayState?.status ?? "waiting";
   const me = displayState?.players.find((p) => p.id === user?.id);
@@ -166,8 +168,9 @@ export function Shooters({ eventId }: { eventId: string }) {
       </div>
 
       <p className="pong-role">
-        Move: drag/WASD. Fire: hold (touch/click/Space) toward your facing direction. {SHOOTER_MAX_AMMO} shots,
-        then reload. First to {displayState?.killTarget ?? 5} kills. <span style={{ color: myColor }}>●</span>
+        Move: WASD (or drag on touch). Aim: mouse cursor on desktop. Fire: hold (click/touch/Space).{" "}
+        {SHOOTER_MAX_AMMO} shots, then reload. First to {displayState?.killTarget ?? 5} kills.{" "}
+        <span style={{ color: myColor }}>●</span>
       </p>
     </div>
   );
