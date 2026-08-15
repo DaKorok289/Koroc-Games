@@ -95,9 +95,10 @@ export function PongGame() {
     if (!canvas || !container) return;
     const resize = () => {
       const rect = container.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      if (rect.width < 1 || rect.height < 1) return; // layout not settled yet — wait for the next observed resize
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap backing-store size on high-DPI phones
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
     };

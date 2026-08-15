@@ -53,6 +53,7 @@ button {
 
 .loading-screen {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -77,6 +78,7 @@ button {
 
 .auth-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -188,6 +190,7 @@ input:focus {
 
 .lobby-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -314,6 +317,7 @@ input:focus {
 
 .game-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -367,13 +371,15 @@ input:focus {
 }
 
 .pong-canvas-container {
-  flex: 1;
   position: relative;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  min-height: 260px;
   touch-action: none;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  max-height: 100%;
+  margin: 0 auto;
 }
 
 .pong-canvas {
