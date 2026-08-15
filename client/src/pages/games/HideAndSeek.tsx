@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { SOCKET_EVENTS, type HideSeekState } from "@koroc/shared";
 import { useSocket } from "../../context/SocketContext";
 import { useAuth } from "../../context/AuthContext";
+import { useGame } from "../../context/GameContext";
 import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
 import { PlayerRoster } from "../../components/PlayerRoster";
@@ -9,13 +10,13 @@ import { StartMatchControl } from "../../components/StartMatchControl";
 
 const BG = "#0f1020";
 const SEEKER_COLOR = "#ff6b6b";
-const HIDER_COLOR = "#7ce0ff";
 const TAGGED_COLOR = "#3a3d6b";
 const YOU_RING = "#ffd166";
 
-export function HideAndSeek() {
+export function HideAndSeek({ eventId }: { eventId: string }) {
   const socket = useSocket();
   const { user } = useAuth();
+  const { myColor } = useGame();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HideSeekState | null>(null);
@@ -23,11 +24,11 @@ export function HideAndSeek() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.emit(SOCKET_EVENTS.GAME_JOIN, {});
+    socket.emit(SOCKET_EVENTS.GAME_JOIN, { eventId });
     return () => {
-      socket.emit(SOCKET_EVENTS.GAME_LEAVE);
+      socket.emit(SOCKET_EVENTS.GAME_LEAVE, { eventId });
     };
-  }, [socket]);
+  }, [socket, eventId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -74,15 +75,15 @@ export function HideAndSeek() {
           ctx.stroke();
         }
 
-        ctx.fillStyle = player.isSeeker ? SEEKER_COLOR : player.tagged ? TAGGED_COLOR : HIDER_COLOR;
+        ctx.fillStyle = player.isSeeker ? SEEKER_COLOR : player.tagged ? TAGGED_COLOR : player.color;
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = "#f2f3ff";
-        ctx.font = "12px sans-serif";
+        ctx.font = "bold 16px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(player.username, px, py - r - 8);
+        ctx.fillText(player.username, px, py - r - 12);
       }
     };
     raf = requestAnimationFrame(draw);
@@ -90,7 +91,7 @@ export function HideAndSeek() {
   }, [user?.id]);
 
   useResizableCanvas(canvasRef, containerRef);
-  useArenaMovement(socket, canvasRef);
+  useArenaMovement(socket, canvasRef, eventId);
 
   const status = displayState?.status ?? "waiting";
   const me = displayState?.players.find((p) => p.id === user?.id);
@@ -107,6 +108,7 @@ export function HideAndSeek() {
         <>
           <PlayerRoster players={displayState.players} youId={user?.id} title="Players joining" />
           <StartMatchControl
+            eventId={eventId}
             canStart={displayState.players.length >= 2}
             notEnoughHint="Need at least 2 players to start"
           />
@@ -123,8 +125,8 @@ export function HideAndSeek() {
       </div>
 
       <p className="pong-role">
-        Drag on the arena or use WASD / Arrow keys to move. The seeker (red) tags hiders (blue) by getting close —
-        hiders win by surviving the clock.
+        Move: drag/WASD. Seeker (red) tags hiders by getting close — hiders win by surviving.{" "}
+        <span style={{ color: myColor }}>●</span>
       </p>
     </div>
   );

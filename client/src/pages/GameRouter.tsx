@@ -10,19 +10,20 @@ import { Shooters } from "./games/Shooters";
 
 export function GameRouter() {
   const { user } = useAuth();
-  const { activeEvent, endEvent } = useGame();
+  const { events, myEventId, endEvent, leaveEvent } = useGame();
   const screenRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, supported, toggle } = useFullscreen(screenRef);
-  if (!activeEvent) return null;
+  const event = events.find((e) => e.id === myEventId);
+  if (!event) return null;
 
-  const info = GAME_INFO[activeEvent.gameType];
+  const info = GAME_INFO[event.gameType];
 
   return (
     <div className="game-screen" ref={screenRef}>
       <header className="game-header">
         <div>
           <h1>{info.label}</h1>
-          <span className="started-by">started by {activeEvent.startedBy}</span>
+          <span className="started-by">started by {event.startedBy}</span>
         </div>
         <div className="header-actions">
           {supported && (
@@ -30,18 +31,21 @@ export function GameRouter() {
               {isFullscreen ? "⤦" : "⛶"}
             </button>
           )}
+          <button className="icon-btn" onClick={() => leaveEvent()} type="button" title="Back to lobby">
+            Leave
+          </button>
           {user?.isAdmin && (
-            <button className="danger-btn" onClick={() => endEvent()} type="button">
+            <button className="danger-btn" onClick={() => endEvent(event.id)} type="button">
               End Event
             </button>
           )}
         </div>
       </header>
 
-      {activeEvent.gameType === "ping-pong" && <PongGame />}
-      {activeEvent.gameType === "hide-and-seek" && <HideAndSeek />}
-      {activeEvent.gameType === "wizard-battles" && <WizardBattles />}
-      {activeEvent.gameType === "shooters" && <Shooters />}
+      {event.gameType === "ping-pong" && <PongGame eventId={event.id} />}
+      {event.gameType === "hide-and-seek" && <HideAndSeek eventId={event.id} />}
+      {event.gameType === "wizard-battles" && <WizardBattles eventId={event.id} />}
+      {event.gameType === "shooters" && <Shooters eventId={event.id} />}
     </div>
   );
 }

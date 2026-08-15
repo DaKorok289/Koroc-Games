@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ARENA_BUSHES, ARENA_WALLS, SOCKET_EVENTS, type ShooterState } from "@koroc/shared";
+import { ARENA_BUSHES, ARENA_WALLS, SHOOTER_MAX_AMMO, SOCKET_EVENTS, type ShooterState } from "@koroc/shared";
 import { useSocket } from "../../context/SocketContext";
 import { useAuth } from "../../context/AuthContext";
+import { useGame } from "../../context/GameContext";
 import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
 import { PlayerRoster } from "../../components/PlayerRoster";
@@ -11,16 +12,16 @@ const BG = "#0f1020";
 const WALL_COLOR = "#4a4d7a";
 const BUSH_COLOR = "rgba(92, 232, 122, 0.18)";
 const BUSH_BORDER = "rgba(92, 232, 122, 0.5)";
-const PLAYER_COLOR = "#7ce0ff";
 const DEAD_COLOR = "#3a3d6b";
 const TRACER_COLOR = "#ffd166";
-const YOU_RING = "#ff6b6b";
+const YOU_RING = "#f2f3ff";
 const HP_BAR_BG = "#2c2f5c";
 const HP_BAR_FILL = "#5ce87a";
 
-export function Shooters() {
+export function Shooters({ eventId }: { eventId: string }) {
   const socket = useSocket();
   const { user } = useAuth();
+  const { myColor } = useGame();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<ShooterState | null>(null);
@@ -28,11 +29,11 @@ export function Shooters() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.emit(SOCKET_EVENTS.GAME_JOIN, {});
+    socket.emit(SOCKET_EVENTS.GAME_JOIN, { eventId });
     return () => {
-      socket.emit(SOCKET_EVENTS.GAME_LEAVE);
+      socket.emit(SOCKET_EVENTS.GAME_LEAVE, { eventId });
     };
-  }, [socket]);
+  }, [socket, eventId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -102,7 +103,7 @@ export function Shooters() {
         }
 
         ctx.globalAlpha = isYou && player.inBush ? 0.45 : 1;
-        ctx.fillStyle = player.alive ? PLAYER_COLOR : DEAD_COLOR;
+        ctx.fillStyle = player.alive ? player.color : DEAD_COLOR;
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
         ctx.fill();
@@ -111,7 +112,7 @@ export function Shooters() {
         if (player.alive) {
           const barW = r * 2.4;
           const barX = px - barW / 2;
-          const barY = py - r - 16;
+          const barY = py - r - 20;
           ctx.fillStyle = HP_BAR_BG;
           ctx.fillRect(barX, barY, barW, 4);
           ctx.fillStyle = HP_BAR_FILL;
@@ -119,9 +120,9 @@ export function Shooters() {
         }
 
         ctx.fillStyle = "#f2f3ff";
-        ctx.font = "12px sans-serif";
+        ctx.font = "bold 16px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(`${player.username} (${player.kills})`, px, py - r - 20);
+        ctx.fillText(`${player.username} (${player.kills})`, px, py - r - 26);
       }
     };
     raf = requestAnimationFrame(draw);
@@ -129,7 +130,7 @@ export function Shooters() {
   }, [user?.id]);
 
   useResizableCanvas(canvasRef, containerRef);
-  useArenaMovement(socket, canvasRef);
+  useArenaMovement(socket, canvasRef, eventId, true);
 
   const status = displayState?.status ?? "waiting";
   const me = displayState?.players.find((p) => p.id === user?.id);
@@ -138,7 +139,9 @@ export function Shooters() {
     <div className="arena-wrap">
       <div className="arena-scoreboard">
         <span>{me ? `${me.kills} / ${displayState?.killTarget} kills` : "waiting…"}</span>
-        <span className="score">{me ? `${me.hp} HP` : ""}</span>
+        <span className="score">
+          {me ? `${me.hp} HP` : ""} {me?.reloading ? "· reloading…" : me ? `· ${me.ammo} ammo` : ""}
+        </span>
         <span>{me && !me.alive ? "Respawning…" : ""}</span>
       </div>
 
@@ -146,6 +149,7 @@ export function Shooters() {
         <>
           <PlayerRoster players={displayState.players} youId={user?.id} title="Players joining" />
           <StartMatchControl
+            eventId={eventId}
             canStart={displayState.players.length >= 2}
             notEnoughHint="Need at least 2 players to start"
           />
@@ -162,10 +166,8 @@ export function Shooters() {
       </div>
 
       <p className="pong-role">
-        Drag on the arena or use WASD / Arrow keys to move. You auto-fire at the nearest{" "}
-        <strong>visible</strong> opponent in range — walls block line of sight, and the green bushes
-        hide you from anyone not standing in the same one. Respawns on death. First to{" "}
-        {displayState?.killTarget ?? 5} kills wins.
+        Move: drag/WASD. Fire: hold (touch/click/Space) toward your facing direction. {SHOOTER_MAX_AMMO} shots,
+        then reload. First to {displayState?.killTarget ?? 5} kills. <span style={{ color: myColor }}>●</span>
       </p>
     </div>
   );

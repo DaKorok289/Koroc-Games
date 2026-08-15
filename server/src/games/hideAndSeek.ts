@@ -16,6 +16,7 @@ interface InternalPlayer {
   socketId: string;
   id: number;
   username: string;
+  color: string;
   x: number;
   y: number;
   isSeeker: boolean;
@@ -48,13 +49,14 @@ export class HideAndSeekGame {
     this.onEnd = onEnd;
   }
 
-  addParticipant(user: PublicUser, socketId: string): void {
+  addParticipant(user: PublicUser, socketId: string, color: string): void {
     if (!this.players.has(socketId)) {
       const spawn = randomSpawn();
       this.players.set(socketId, {
         socketId,
         id: user.id,
         username: user.username,
+        color,
         x: spawn.x,
         y: spawn.y,
         isSeeker: false,
@@ -189,6 +191,7 @@ export class HideAndSeekGame {
       players: Array.from(this.players.values()).map((p) => ({
         id: p.id,
         username: p.username,
+        color: p.color,
         x: p.x,
         y: p.y,
         isSeeker: p.isSeeker,

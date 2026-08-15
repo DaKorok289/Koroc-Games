@@ -35,7 +35,7 @@ export interface PublicUser {
 
 export interface LobbyState {
   users: PublicUser[];
-  activeEvent: ActiveEvent | null;
+  events: ActiveEvent[];
 }
 
 export interface ActiveEvent {
@@ -131,6 +131,25 @@ export const ARENA_BUSHES: ArenaRect[] = [
   { x: 0.81, y: 0.81, w: 0.19, h: 0.19 },
 ];
 
+// Player customization: a small preset palette (not a free color picker) so we never
+// need to sanitize arbitrary strings — the server just validates against this list.
+export const PLAYER_COLOR_PRESETS = [
+  "#ff6b6b", // red
+  "#ffa94d", // orange
+  "#ffd166", // yellow
+  "#5ce87a", // green
+  "#4dd4d4", // teal
+  "#7ce0ff", // cyan
+  "#7c9bff", // blue
+  "#b48bff", // purple
+  "#ff8bcf", // pink
+  "#f2f3ff", // white
+] as const;
+
+export function defaultColorForUser(userId: number): string {
+  return PLAYER_COLOR_PRESETS[userId % PLAYER_COLOR_PRESETS.length];
+}
+
 // -- Hide & Seek --
 
 export interface HideSeekPlayer {
@@ -140,6 +159,7 @@ export interface HideSeekPlayer {
   y: number;
   isSeeker: boolean;
   tagged: boolean;
+  color: string;
 }
 
 export interface HideSeekState {
@@ -165,6 +185,9 @@ export interface WizardPlayer {
   hp: number;
   alive: boolean;
   inBush: boolean;
+  color: string;
+  charges: number;
+  reloading: boolean;
 }
 
 export interface WizardBolt {
@@ -192,8 +215,9 @@ export interface WizardBattleState {
 export const WIZARD_HP_START = 100;
 export const WIZARD_BOLT_DAMAGE = 20;
 export const WIZARD_BOLT_SPEED = 0.5; // field fraction per second
-export const WIZARD_CAST_COOLDOWN_MS = 900;
-export const WIZARD_CAST_RANGE = 0.7; // won't auto-cast at targets farther than this
+export const WIZARD_CAST_COOLDOWN_MS = 350; // minimum time between individual casts
+export const WIZARD_MAX_CHARGES = 3;
+export const WIZARD_RECHARGE_MS = 1800; // full recharge once charges hit 0
 
 // -- Shooters --
 
@@ -206,6 +230,9 @@ export interface ShooterPlayer {
   kills: number;
   alive: boolean;
   inBush: boolean;
+  color: string;
+  ammo: number;
+  reloading: boolean;
 }
 
 export interface ShooterTracer {
@@ -226,10 +253,13 @@ export interface ShooterState {
 
 export const SHOOTER_HP_START = 100;
 export const SHOOTER_SHOT_DAMAGE = 34;
-export const SHOOTER_FIRE_COOLDOWN_MS = 450;
+export const SHOOTER_FIRE_COOLDOWN_MS = 250; // minimum time between individual shots
 export const SHOOTER_FIRE_RANGE = 0.55;
 export const SHOOTER_RESPAWN_MS = 2500;
 export const SHOOTER_KILL_TARGET = 5;
+export const SHOOTER_MAX_AMMO = 6;
+export const SHOOTER_RELOAD_MS = 1500; // full reload once ammo hits 0
+export const SHOOTER_HIT_RADIUS_BONUS = 0.015; // forgiveness added to ARENA_PLAYER_RADIUS for hitscan
 
 // ---- Socket event name constants (avoid typos across client/server) ----
 
@@ -246,6 +276,8 @@ export const SOCKET_EVENTS = {
   PONG_STATE: "pong:state",
   PONG_TOURNAMENT_STATE: "pong:tournamentState",
   ARENA_INPUT: "arena:input",
+  ARENA_FIRE: "arena:fire",
+  SET_COLOR: "player:setColor",
   HIDE_SEEK_STATE: "hideSeek:state",
   WIZARD_STATE: "wizard:state",
   SHOOTER_STATE: "shooter:state",

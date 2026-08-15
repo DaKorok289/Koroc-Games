@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { GAME_INFO, GAME_TYPES } from "@koroc/shared";
 import { useAuth } from "../context/AuthContext";
 import { useGame } from "../context/GameContext";
+import { ColorPicker } from "../components/ColorPicker";
 
 export function Lobby() {
   const { user, logout } = useAuth();
-  const { users, startEvent, errorMessage } = useGame();
+  const { users, events, startEvent, joinEvent, errorMessage } = useGame();
+  const [tab, setTab] = useState<"join" | "minigames">("join");
 
   return (
     <div className="lobby-screen">
@@ -15,6 +18,7 @@ export function Lobby() {
             {user?.username}
             {user?.isAdmin && <span className="badge">admin</span>}
           </span>
+          <ColorPicker />
           <button className="link-btn" onClick={() => logout()} type="button">
             Sign out
           </button>
@@ -38,26 +42,71 @@ export function Lobby() {
         </section>
 
         <section className="games-panel">
-          <h2>Minigames</h2>
-          <div className="game-grid">
-            {GAME_TYPES.map((gt) => {
-              const info = GAME_INFO[gt];
-              return (
-                <div className="game-card" key={gt}>
-                  <h3>{info.label}</h3>
-                  <p>{info.description}</p>
-                  {user?.isAdmin ? (
-                    <button className="primary-btn" onClick={() => startEvent(gt)} type="button">
-                      Start Event
-                    </button>
-                  ) : (
-                    <span className="waiting-text">Waiting for admin…</span>
-                  )}
-                </div>
-              );
-            })}
+          <div className="tabs">
+            <button className={tab === "join" ? "tab active" : "tab"} onClick={() => setTab("join")} type="button">
+              Join Games {events.length > 0 && `(${events.length})`}
+            </button>
+            <button
+              className={tab === "minigames" ? "tab active" : "tab"}
+              onClick={() => setTab("minigames")}
+              type="button"
+            >
+              Minigames
+            </button>
           </div>
-          {!user?.isAdmin && <p className="hint">Only admins can start an event. Ask an admin to kick one off!</p>}
+
+          {tab === "join" && (
+            <>
+              {events.length === 0 ? (
+                <p className="hint">
+                  Nothing running right now.{" "}
+                  {user?.isAdmin ? "Start one from the Minigames tab." : "Ask an admin to start one."}
+                </p>
+              ) : (
+                <div className="game-grid">
+                  {events.map((event) => {
+                    const info = GAME_INFO[event.gameType];
+                    return (
+                      <div className="game-card" key={event.id}>
+                        <h3>{info.label}</h3>
+                        <p>started by {event.startedBy}</p>
+                        <button className="primary-btn" onClick={() => joinEvent(event.id)} type="button">
+                          Join
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === "minigames" && (
+            <>
+              <div className="game-grid">
+                {GAME_TYPES.map((gt) => {
+                  const info = GAME_INFO[gt];
+                  return (
+                    <div className="game-card" key={gt}>
+                      <h3>{info.label}</h3>
+                      <p>{info.description}</p>
+                      {user?.isAdmin ? (
+                        <button className="primary-btn" onClick={() => startEvent(gt)} type="button">
+                          Start Event
+                        </button>
+                      ) : (
+                        <span className="waiting-text">Only admins can start events</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="hint">
+                Starting an event doesn't join you to it automatically — switch to "Join Games" (or click Join
+                right after starting) to actually play.
+              </p>
+            </>
+          )}
         </section>
       </main>
     </div>

@@ -7,7 +7,7 @@ import { StartMatchControl } from "../../components/StartMatchControl";
 import { PongMatchView } from "./PongMatchView";
 import { PongBracketTree } from "./PongBracketTree";
 
-export function PongGame() {
+export function PongGame({ eventId }: { eventId: string }) {
   const socket = useSocket();
   const { user } = useAuth();
   const liveRef = useRef<PongState | null>(null);
@@ -15,11 +15,11 @@ export function PongGame() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.emit(SOCKET_EVENTS.GAME_JOIN, {});
+    socket.emit(SOCKET_EVENTS.GAME_JOIN, { eventId });
     return () => {
-      socket.emit(SOCKET_EVENTS.GAME_LEAVE);
+      socket.emit(SOCKET_EVENTS.GAME_LEAVE, { eventId });
     };
-  }, [socket]);
+  }, [socket, eventId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -55,7 +55,11 @@ export function PongGame() {
     return (
       <div className="arena-wrap">
         <PlayerRoster players={displayState.roster} youId={user?.id} title="Players joining the tournament" />
-        <StartMatchControl canStart={displayState.roster.length >= 2} notEnoughHint="Need at least 2 players to start" />
+        <StartMatchControl
+          eventId={eventId}
+          canStart={displayState.roster.length >= 2}
+          notEnoughHint="Need at least 2 players to start"
+        />
         <p className="pong-role">
           The bracket is generated the moment the host starts it — everyone who's joined by then is entered.
         </p>
@@ -75,7 +79,7 @@ export function PongGame() {
   return (
     <div className="arena-wrap">
       {displayState.live ? (
-        <PongMatchView socket={socket} liveRef={liveRef} live={displayState.live} youId={user?.id} />
+        <PongMatchView socket={socket} eventId={eventId} liveRef={liveRef} live={displayState.live} youId={user?.id} />
       ) : (
         <p className="pong-role">Waiting for the next match…</p>
       )}

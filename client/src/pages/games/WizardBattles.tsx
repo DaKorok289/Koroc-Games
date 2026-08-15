@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ARENA_BUSHES, ARENA_WALLS, SOCKET_EVENTS, type WizardBattleState } from "@koroc/shared";
+import { ARENA_BUSHES, ARENA_WALLS, SOCKET_EVENTS, WIZARD_MAX_CHARGES, type WizardBattleState } from "@koroc/shared";
 import { useSocket } from "../../context/SocketContext";
 import { useAuth } from "../../context/AuthContext";
+import { useGame } from "../../context/GameContext";
 import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
 import { PlayerRoster } from "../../components/PlayerRoster";
@@ -11,15 +12,15 @@ const BG = "#0f1020";
 const WALL_COLOR = "#4a4d7a";
 const BUSH_COLOR = "rgba(92, 232, 122, 0.18)";
 const BUSH_BORDER = "rgba(92, 232, 122, 0.5)";
-const WIZARD_COLOR = "#b48bff";
 const BOLT_COLOR = "#ffd166";
-const YOU_RING = "#7ce0ff";
+const YOU_RING = "#f2f3ff";
 const HP_BAR_BG = "#2c2f5c";
 const HP_BAR_FILL = "#5ce87a";
 
-export function WizardBattles() {
+export function WizardBattles({ eventId }: { eventId: string }) {
   const socket = useSocket();
   const { user } = useAuth();
+  const { myColor } = useGame();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<WizardBattleState | null>(null);
@@ -27,11 +28,11 @@ export function WizardBattles() {
 
   useEffect(() => {
     if (!socket) return;
-    socket.emit(SOCKET_EVENTS.GAME_JOIN, {});
+    socket.emit(SOCKET_EVENTS.GAME_JOIN, { eventId });
     return () => {
-      socket.emit(SOCKET_EVENTS.GAME_LEAVE);
+      socket.emit(SOCKET_EVENTS.GAME_LEAVE, { eventId });
     };
-  }, [socket]);
+  }, [socket, eventId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -100,7 +101,7 @@ export function WizardBattles() {
         }
 
         ctx.globalAlpha = isYou && player.inBush ? 0.45 : 1;
-        ctx.fillStyle = WIZARD_COLOR;
+        ctx.fillStyle = player.color;
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
         ctx.fill();
@@ -108,16 +109,16 @@ export function WizardBattles() {
 
         const barW = r * 2.4;
         const barX = px - barW / 2;
-        const barY = py - r - 16;
+        const barY = py - r - 20;
         ctx.fillStyle = HP_BAR_BG;
         ctx.fillRect(barX, barY, barW, 4);
         ctx.fillStyle = HP_BAR_FILL;
         ctx.fillRect(barX, barY, barW * (player.hp / 100), 4);
 
         ctx.fillStyle = "#f2f3ff";
-        ctx.font = "12px sans-serif";
+        ctx.font = "bold 16px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(player.username, px, py - r - 20);
+        ctx.fillText(player.username, px, py - r - 26);
       }
     };
     raf = requestAnimationFrame(draw);
@@ -125,7 +126,7 @@ export function WizardBattles() {
   }, [user?.id]);
 
   useResizableCanvas(canvasRef, containerRef);
-  useArenaMovement(socket, canvasRef);
+  useArenaMovement(socket, canvasRef, eventId, true);
 
   const status = displayState?.status ?? "waiting";
   const me = displayState?.players.find((p) => p.id === user?.id);
@@ -134,7 +135,9 @@ export function WizardBattles() {
     <div className="arena-wrap">
       <div className="arena-scoreboard">
         <span>{displayState ? `${displayState.players.filter((p) => p.alive).length} alive` : "waiting…"}</span>
-        <span className="score">{me ? `${me.hp} HP` : ""}</span>
+        <span className="score">
+          {me ? `${me.hp} HP` : ""} {me?.reloading ? "· recharging…" : me ? `· ${me.charges} charges` : ""}
+        </span>
         <span>{me && !me.alive ? "Eliminated — spectating" : ""}</span>
       </div>
 
@@ -142,6 +145,7 @@ export function WizardBattles() {
         <>
           <PlayerRoster players={displayState.players} youId={user?.id} title="Wizards joining" />
           <StartMatchControl
+            eventId={eventId}
             canStart={displayState.players.length >= 2}
             notEnoughHint="Need at least 2 wizards to start"
           />
@@ -158,9 +162,8 @@ export function WizardBattles() {
       </div>
 
       <p className="pong-role">
-        Drag on the arena or use WASD / Arrow keys to move. Your wizard auto-casts at the nearest
-        <strong> visible</strong> opponent — walls block line of sight, and the green bushes hide you
-        from anyone not standing in the same one. Last wizard standing wins.
+        Move: drag/WASD. Cast: hold (touch/click/Space) toward your facing direction. {WIZARD_MAX_CHARGES} charges,
+        then recharge. Bushes hide you. <span style={{ color: myColor }}>●</span>
       </p>
     </div>
   );

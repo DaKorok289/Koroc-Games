@@ -5,7 +5,16 @@ import { SOCKET_EVENTS } from "@koroc/shared";
 // Drag (touch/mouse) or WASD/arrow keys to move — shared by every arena-style game
 // (Hide & Seek, Wizard Battles, Shooters). Emits a normalized direction vector;
 // the server is authoritative about actually moving the player.
-export function useArenaMovement(socket: Socket | null, canvasRef: RefObject<HTMLCanvasElement | null>): void {
+//
+// When hasFireAction is set (Wizard Battles, Shooters), the same press also toggles
+// firing: aim is automatic (nearest visible opponent), but nothing fires unless you're
+// actively holding down (touch, left-click, or Space).
+export function useArenaMovement(
+  socket: Socket | null,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  eventId: string,
+  hasFireAction = false,
+): void {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !socket) return;
@@ -20,7 +29,11 @@ export function useArenaMovement(socket: Socket | null, canvasRef: RefObject<HTM
       if (dx === lastSentDx && dy === lastSentDy) return;
       lastSentDx = dx;
       lastSentDy = dy;
-      socket.emit(SOCKET_EVENTS.ARENA_INPUT, { dx, dy });
+      socket.emit(SOCKET_EVENTS.ARENA_INPUT, { eventId, dx, dy });
+    };
+
+    const sendFiring = (firing: boolean) => {
+      if (hasFireAction) socket.emit(SOCKET_EVENTS.ARENA_FIRE, { eventId, firing });
     };
 
     const vectorFrom = (clientX: number, clientY: number) => {
@@ -34,6 +47,7 @@ export function useArenaMovement(socket: Socket | null, canvasRef: RefObject<HTM
       dragging = true;
       originX = e.clientX;
       originY = e.clientY;
+      sendFiring(true);
     };
     const onPointerMove = (e: PointerEvent) => {
       if (!dragging) return;
@@ -43,6 +57,7 @@ export function useArenaMovement(socket: Socket | null, canvasRef: RefObject<HTM
     const onPointerUp = () => {
       dragging = false;
       send(0, 0);
+      sendFiring(false);
     };
 
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -51,8 +66,18 @@ export function useArenaMovement(socket: Socket | null, canvasRef: RefObject<HTM
 
     const keys = new Set<string>();
     let raf = 0;
+    let spaceFiring = false;
     const loop = () => {
       raf = requestAnimationFrame(loop);
+
+      if (hasFireAction) {
+        const spaceHeld = keys.has(" ") || keys.has("Spacebar");
+        if (spaceHeld !== spaceFiring) {
+          spaceFiring = spaceHeld;
+          sendFiring(spaceFiring || dragging);
+        }
+      }
+
       if (dragging) return; // pointer drag takes priority over keyboard
       let dx = 0;
       let dy = 0;
@@ -75,7 +100,8 @@ export function useArenaMovement(socket: Socket | null, canvasRef: RefObject<HTM
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       cancelAnimationFrame(raf);
-      socket.emit(SOCKET_EVENTS.ARENA_INPUT, { dx: 0, dy: 0 });
+      socket.emit(SOCKET_EVENTS.ARENA_INPUT, { eventId, dx: 0, dy: 0 });
+      sendFiring(false);
     };
-  }, [socket, canvasRef]);
+  }, [socket, canvasRef, eventId, hasFireAction]);
 }

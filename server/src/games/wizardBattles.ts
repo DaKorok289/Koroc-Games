@@ -6,8 +6,9 @@ import {
   WIZARD_BOLT_DAMAGE,
   WIZARD_BOLT_SPEED,
   WIZARD_CAST_COOLDOWN_MS,
-  WIZARD_CAST_RANGE,
   WIZARD_HP_START,
+  WIZARD_MAX_CHARGES,
+  WIZARD_RECHARGE_MS,
   type PublicUser,
   type WizardBattleState,
   type WizardBolt,
@@ -21,13 +22,20 @@ interface InternalPlayer {
   socketId: string;
   id: number;
   username: string;
+  color: string;
   x: number;
   y: number;
   hp: number;
   alive: boolean;
   dx: number;
   dy: number;
+  facingDx: number;
+  facingDy: number;
+  firing: boolean;
   lastCastAt: number;
+  charges: number;
+  reloading: boolean;
+  reloadEndsAt: number;
 }
 
 type OnEnd = () => void;
@@ -56,20 +64,27 @@ export class WizardBattleGame {
     this.onEnd = onEnd;
   }
 
-  addParticipant(user: PublicUser, socketId: string): void {
+  addParticipant(user: PublicUser, socketId: string, color: string): void {
     if (!this.players.has(socketId)) {
       const spawn = randomSpawn();
       this.players.set(socketId, {
         socketId,
         id: user.id,
         username: user.username,
+        color,
         x: spawn.x,
         y: spawn.y,
         hp: WIZARD_HP_START,
         alive: true,
         dx: 0,
         dy: 0,
+        facingDx: 1,
+        facingDy: 0,
+        firing: false,
         lastCastAt: 0,
+        charges: WIZARD_MAX_CHARGES,
+        reloading: false,
+        reloadEndsAt: 0,
       });
     }
     this.broadcast();
@@ -93,6 +108,17 @@ export class WizardBattleGame {
     const len = Math.hypot(dx, dy) || 1;
     player.dx = len > 1 ? dx / len : dx;
     player.dy = len > 1 ? dy / len : dy;
+    if (dx !== 0 || dy !== 0) {
+      player.facingDx = player.dx;
+      player.facingDy = player.dy;
+    }
+  }
+
+  /** Tap/hold to cast toward wherever you're currently facing — aim is directional, not automatic. */
+  setFiring(socketId: string, firing: boolean): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    player.firing = firing;
   }
 
   /** Admin-triggered: begins the countdown once enough players have joined. */
@@ -121,7 +147,13 @@ export class WizardBattleGame {
       player.y = spawn.y;
       player.dx = 0;
       player.dy = 0;
+      player.facingDx = 1;
+      player.facingDy = 0;
+      player.firing = false;
       player.lastCastAt = 0;
+      player.charges = WIZARD_MAX_CHARGES;
+      player.reloading = false;
+      player.reloadEndsAt = 0;
     }
     this.bolts = [];
     this.winner = null;
@@ -162,37 +194,32 @@ export class WizardBattleGame {
       const resolved = resolveWallCollision(player.x, player.y, targetX, targetY, ARENA_PLAYER_RADIUS);
       player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.x));
       player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.y));
+
+      if (player.reloading && now >= player.reloadEndsAt) {
+        player.reloading = false;
+        player.charges = WIZARD_MAX_CHARGES;
+      }
     }
 
-    // Auto-cast at the nearest *visible* opponent (walls/bushes make you a non-target).
-    const alivePlayers = Array.from(this.players.values()).filter((p) => p.alive);
-    for (const player of alivePlayers) {
+    // Casts toward the player's current facing direction, only while actively holding
+    // (tap/click), with limited charges before a recharge pause.
+    for (const player of this.players.values()) {
+      if (!player.alive || !player.firing || player.reloading) continue;
       if (now - player.lastCastAt < WIZARD_CAST_COOLDOWN_MS) continue;
-      let nearest: InternalPlayer | null = null;
-      let nearestDist = Infinity;
-      for (const other of alivePlayers) {
-        if (other === player) continue;
-        if (!isVisible(player, other)) continue;
-        const dist = Math.hypot(other.x - player.x, other.y - player.y);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearest = other;
-        }
-      }
-      if (nearest && nearestDist <= WIZARD_CAST_RANGE) {
-        player.lastCastAt = now;
-        const bdx = nearest.x - player.x;
-        const bdy = nearest.y - player.y;
-        const len = Math.hypot(bdx, bdy) || 1;
-        this.boltCounter += 1;
-        this.bolts.push({
-          id: this.boltCounter,
-          x: player.x,
-          y: player.y,
-          vx: (bdx / len) * WIZARD_BOLT_SPEED,
-          vy: (bdy / len) * WIZARD_BOLT_SPEED,
-          ownerId: player.id,
-        });
+      player.lastCastAt = now;
+      player.charges -= 1;
+      this.boltCounter += 1;
+      this.bolts.push({
+        id: this.boltCounter,
+        x: player.x,
+        y: player.y,
+        vx: player.facingDx * WIZARD_BOLT_SPEED,
+        vy: player.facingDy * WIZARD_BOLT_SPEED,
+        ownerId: player.id,
+      });
+      if (player.charges <= 0) {
+        player.reloading = true;
+        player.reloadEndsAt = now + WIZARD_RECHARGE_MS;
       }
     }
 
@@ -246,11 +273,14 @@ export class WizardBattleGame {
         .map((p) => ({
           id: p.id,
           username: p.username,
+          color: p.color,
           x: p.x,
           y: p.y,
           hp: p.hp,
           alive: p.alive,
           inBush: !!bushAt(p.x, p.y),
+          charges: p.charges,
+          reloading: p.reloading,
         })),
       bolts: this.bolts,
       winner: this.winner,

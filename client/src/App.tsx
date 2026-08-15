@@ -6,8 +6,8 @@ import { Lobby } from "./pages/Lobby";
 import { GameRouter } from "./pages/GameRouter";
 
 function AuthedApp() {
-  const { activeEvent } = useGame();
-  return activeEvent ? <GameRouter /> : <Lobby />;
+  const { myEventId } = useGame();
+  return myEventId ? <GameRouter /> : <Lobby />;
 }
 
 export default function App() {

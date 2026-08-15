@@ -79,3 +79,40 @@ export function isVisible(
   }
   return true;
 }
+
+/**
+ * Closest-hit raycast: fires from (px,py) along the normalized (dx,dy) direction out to
+ * `range`, and returns whichever candidate it hits first (closest-point-on-ray-to-circle
+ * test), or null. A candidate only counts if the shooter can currently see it (walls,
+ * bushes) — you can't hit what you can't see, even if it's technically in the ray path.
+ */
+export function raycastHit<T extends { id: number; x: number; y: number }>(
+  shooter: { id: number; x: number; y: number },
+  dx: number,
+  dy: number,
+  range: number,
+  hitRadius: number,
+  candidates: T[],
+): T | null {
+  const len = Math.hypot(dx, dy) || 1;
+  const ndx = dx / len;
+  const ndy = dy / len;
+
+  let closest: T | null = null;
+  let closestT = Infinity;
+  for (const candidate of candidates) {
+    if (candidate.id === shooter.id) continue;
+    const toX = candidate.x - shooter.x;
+    const toY = candidate.y - shooter.y;
+    const t = toX * ndx + toY * ndy;
+    if (t < 0 || t > range || t >= closestT) continue;
+    const closestX = shooter.x + ndx * t;
+    const closestY = shooter.y + ndy * t;
+    const distSq = (candidate.x - closestX) ** 2 + (candidate.y - closestY) ** 2;
+    if (distSq > hitRadius * hitRadius) continue;
+    if (!isVisible(shooter, candidate)) continue;
+    closest = candidate;
+    closestT = t;
+  }
+  return closest;
+}

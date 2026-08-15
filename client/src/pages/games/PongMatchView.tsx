@@ -14,11 +14,13 @@ const BALL_COLOR = "#ffd166";
 // parent re-rendering 60x/sec.
 export function PongMatchView({
   socket,
+  eventId,
   liveRef,
   live,
   youId,
 }: {
   socket: Socket | null;
+  eventId: string;
   liveRef: RefObject<PongState | null>;
   live: PongState;
   youId?: number;
@@ -78,7 +80,7 @@ export function PongMatchView({
     const sendPaddleY = (clientY: number) => {
       const rect = canvas.getBoundingClientRect();
       const y = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-      socket.emit(SOCKET_EVENTS.PONG_INPUT, { paddleY: y });
+      socket.emit(SOCKET_EVENTS.PONG_INPUT, { eventId, paddleY: y });
     };
 
     let dragging = false;
@@ -103,7 +105,7 @@ export function PongMatchView({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [socket]);
+  }, [socket, eventId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -120,7 +122,7 @@ export function PongMatchView({
       if (keys.has("ArrowDown") || keys.has("s") || keys.has("S")) target += 0.02;
       if (target !== current) {
         paddleY = Math.min(1, Math.max(0, target));
-        socket.emit(SOCKET_EVENTS.PONG_INPUT, { paddleY });
+        socket.emit(SOCKET_EVENTS.PONG_INPUT, { eventId, paddleY });
       }
     };
     const onKeyDown = (e: KeyboardEvent) => keys.add(e.key);
@@ -133,7 +135,7 @@ export function PongMatchView({
       window.removeEventListener("keyup", onKeyUp);
       cancelAnimationFrame(raf);
     };
-  }, [socket, liveRef]);
+  }, [socket, eventId, liveRef]);
 
   return (
     <div className="pong-wrap">
