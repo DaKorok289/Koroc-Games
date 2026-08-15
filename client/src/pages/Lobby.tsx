@@ -1,19 +1,22 @@
 import { useState } from "react";
-import { GAME_INFO, GAME_TYPES } from "@koroc/shared";
+import { GAME_INFO, GAME_TYPES, SHOP_COLORS } from "@koroc/shared";
 import { useAuth } from "../context/AuthContext";
 import { useGame } from "../context/GameContext";
 import { ColorPicker } from "../components/ColorPicker";
 
 export function Lobby() {
   const { user, logout } = useAuth();
-  const { users, events, startEvent, joinEvent, errorMessage, leaderboard } = useGame();
-  const [tab, setTab] = useState<"join" | "minigames" | "leaderboard">("join");
+  const { users, events, startEvent, joinEvent, errorMessage, leaderboard, shop, purchaseCosmetic } = useGame();
+  const [tab, setTab] = useState<"join" | "minigames" | "leaderboard" | "shop">("join");
 
   return (
     <div className="lobby-screen">
       <header className="lobby-header">
         <h1 className="brand">🎮 Koroc Games</h1>
         <div className="who-am-i">
+          <span className="coin-balance" title="Coins earned from wins">
+            🪙 {shop.coins}
+          </span>
           <span>
             {user?.username}
             {user?.isAdmin && <span className="badge">admin</span>}
@@ -59,6 +62,9 @@ export function Lobby() {
               type="button"
             >
               Leaderboard
+            </button>
+            <button className={tab === "shop" ? "tab active" : "tab"} onClick={() => setTab("shop")} type="button">
+              Shop
             </button>
           </div>
 
@@ -138,6 +144,38 @@ export function Lobby() {
                   ))}
                 </ol>
               )}
+            </>
+          )}
+
+          {tab === "shop" && (
+            <>
+              <p className="hint">
+                Earn 10 coins per win. You have <strong>🪙 {shop.coins}</strong>.
+              </p>
+              <div className="shop-grid">
+                {SHOP_COLORS.map((item) => {
+                  const owned = shop.owned.includes(item.id);
+                  const canAfford = shop.coins >= item.price;
+                  return (
+                    <div className="shop-card" key={item.id}>
+                      <div className="shop-swatch" style={{ backgroundColor: item.color }} />
+                      <h3>{item.label}</h3>
+                      {owned ? (
+                        <span className="waiting-text">Owned</span>
+                      ) : (
+                        <button
+                          className="primary-btn"
+                          onClick={() => purchaseCosmetic(item.id)}
+                          disabled={!canAfford}
+                          type="button"
+                        >
+                          🪙 {item.price}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </>
           )}
         </section>

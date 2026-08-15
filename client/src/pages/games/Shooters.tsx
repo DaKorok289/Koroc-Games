@@ -8,6 +8,8 @@ import { useArenaMovement } from "../../hooks/useArenaMovement";
 import { useMouseAim } from "../../hooks/useMouseAim";
 import { PlayerRoster } from "../../components/PlayerRoster";
 import { StartMatchControl } from "../../components/StartMatchControl";
+import { DPad } from "../../components/DPad";
+import { FireButton } from "../../components/FireButton";
 
 const BG = "#0f1020";
 const WALL_COLOR = "#4a4d7a";
@@ -165,12 +167,18 @@ export function Shooters({ eventId }: { eventId: string }) {
         {status === "finished" && (
           <div className="pong-overlay">{displayState?.winner ? `${displayState.winner.username} wins!` : "Draw!"}</div>
         )}
+        {status === "playing" && (
+          <>
+            <DPad socket={socket} eventId={eventId} />
+            <FireButton socket={socket} eventId={eventId} label="Fire" />
+          </>
+        )}
       </div>
 
       <p className="pong-role">
-        Move: WASD (or drag on touch). Aim: mouse cursor on desktop. Fire: hold (click/touch/Space).{" "}
-        {SHOOTER_MAX_AMMO} shots, then reload. First to {displayState?.killTarget ?? 5} kills.{" "}
-        <span style={{ color: myColor }}>●</span>
+        Move: WASD/arrows (or drag on touch). Aim: mouse cursor on desktop, else facing.
+        Fire: hold (click/touch/Space/Fire button). {SHOOTER_MAX_AMMO} shots, then reload.
+        First to {displayState?.killTarget ?? 5} kills. <span style={{ color: myColor }}>●</span>
       </p>
     </div>
   );

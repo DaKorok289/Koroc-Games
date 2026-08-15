@@ -7,6 +7,8 @@ import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
 import { PlayerRoster } from "../../components/PlayerRoster";
 import { StartMatchControl } from "../../components/StartMatchControl";
+import { DPad } from "../../components/DPad";
+import { FireButton } from "../../components/FireButton";
 
 const BG = "#0f1020";
 const WALL_COLOR = "#4a4d7a";
@@ -159,11 +161,18 @@ export function WizardBattles({ eventId }: { eventId: string }) {
         {status === "finished" && (
           <div className="pong-overlay">{displayState?.winner ? `${displayState.winner.username} wins!` : "Draw!"}</div>
         )}
+        {status === "playing" && (
+          <>
+            <DPad socket={socket} eventId={eventId} />
+            <FireButton socket={socket} eventId={eventId} label="Cast" />
+          </>
+        )}
       </div>
 
       <p className="pong-role">
-        Move: drag/WASD. Cast: hold (touch/click/Space) toward your facing direction. {WIZARD_MAX_CHARGES} charges,
-        then recharge. Bushes hide you. <span style={{ color: myColor }}>●</span>
+        Move: drag/WASD/arrows. Cast: hold (touch/click/Space/Cast button) toward your facing
+        direction. {WIZARD_MAX_CHARGES} charges, then recharge. Bushes hide you.{" "}
+        <span style={{ color: myColor }}>●</span>
       </p>
     </div>
   );

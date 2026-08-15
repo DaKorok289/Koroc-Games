@@ -22,9 +22,10 @@ TypeScript end to end.
 
 Every game is admin-controlled: the admin who started it decides when it actually begins (so
 they can wait for more sign-ups), every game screen supports a fullscreen toggle plus canvases
-that scale to fill the available screen without ever needing to scroll, players can pick their
-own character color from the lobby, and a persistent **Leaderboard** tab tracks wins across
-every game.
+that scale to fill the available screen without ever needing to scroll, and touch devices
+(iPad especially) get on-screen D-pad arrows for movement alongside drag/WASD. Winning games
+earns coins, spendable in the lobby's **Shop** on extra character colors, and a persistent
+**Leaderboard** tab tracks wins across every game.
 
 ## Stack
 
@@ -99,9 +100,23 @@ config is needed for LAN play.
   participant, not a single broadcast), so a hidden player can't be found by inspecting
   network traffic either. Visibility rules only apply once a round is actually playing — the
   pre-game roster and post-game results always show everyone.
-- **Character color**: pick from a small preset palette via the swatch button in the lobby
-  header. Persisted in `localStorage` and re-sent to the server on every connect (colors are
-  tracked in memory only), then shown on your character in every arena game.
+- **Tag's tagger indicator**: whoever's "it" gets a red ring around their character (in
+  addition to the fill color) plus a banner at the top of every player's screen naming them —
+  visible to everyone, not just the tagger.
+- **On-screen D-pad**: `client/src/components/DPad.tsx` renders Up/Down/Left/Right buttons
+  during play in Tag/Wizard Battles/Shooters, emitting the same `arena:input` event as
+  drag/WASD — a supplement, not a replacement, so touch, mouse, and keyboard all keep working
+  simultaneously. Wizard Battles/Shooters also get a companion `FireButton` (`arena:fire`) so
+  a D-pad-using thumb still has a way to attack with the other hand.
+- **Character color & cosmetic shop**: pick from a small free preset palette via the swatch
+  button in the lobby header. Persisted in `localStorage` and re-sent to the server on every
+  connect (colors live in memory only), then shown on your character in every arena game.
+  Winning a game earns `COINS_PER_WIN` coins (added in the same `recordWin` call that logs the
+  win); the lobby's **Shop** tab spends them on additional `SHOP_COLORS`, tracked per-user in
+  a `user_cosmetics` table. Purchases are atomic (`purchaseCosmetic` in `server/src/db.ts` —
+  deduct-and-insert in one transaction, so a failed/insufficient-funds attempt never partially
+  applies), and the server revalidates on every `player:setColor` that the requested color is
+  either a free preset or something this specific user actually owns.
 - **Leaderboard**: every game reports its winner(s) to `server/src/db.ts` (a `wins` table) the
   moment its event ends — Ping Pong credits the tournament champion, Tag credits everyone
   except whoever was "it", Wizard Battles/Shooters credit the last one standing. The lobby's

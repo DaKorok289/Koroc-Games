@@ -157,6 +157,33 @@ export function defaultColorForUser(userId: number): string {
   return PLAYER_COLOR_PRESETS[userId % PLAYER_COLOR_PRESETS.length];
 }
 
+// ---- Cosmetic shop ----
+
+export const COINS_PER_WIN = 10;
+
+export interface ShopColor {
+  id: string;
+  color: string;
+  label: string;
+  price: number;
+}
+
+// Purchasable colors — distinct from the free PLAYER_COLOR_PRESETS above. Validated the
+// same way server-side: never trust an arbitrary color string, only these ids/hexes.
+export const SHOP_COLORS: ShopColor[] = [
+  { id: "gold", color: "#ffd700", label: "Gold", price: 30 },
+  { id: "neon-green", color: "#39ff14", label: "Neon Green", price: 30 },
+  { id: "hot-pink", color: "#ff1493", label: "Hot Pink", price: 40 },
+  { id: "electric-blue", color: "#00e5ff", label: "Electric Blue", price: 40 },
+  { id: "royal-purple", color: "#9400d3", label: "Royal Purple", price: 50 },
+  { id: "crimson", color: "#dc143c", label: "Crimson", price: 50 },
+];
+
+export interface ShopState {
+  coins: number;
+  owned: string[]; // ShopColor ids this user has purchased
+}
+
 // -- Tag --
 // One player starts "it"; tagging someone passes it to them (with brief immunity for
 // the player who just stopped being it, so it can't be instantly passed straight back).
@@ -289,6 +316,8 @@ export const SOCKET_EVENTS = {
   ARENA_FIRE: "arena:fire",
   ARENA_AIM: "arena:aim",
   SET_COLOR: "player:setColor",
+  SHOP_STATE: "shop:state",
+  PURCHASE_COSMETIC: "shop:purchase",
   HIDE_SEEK_STATE: "hideSeek:state",
   WIZARD_STATE: "wizard:state",
   SHOOTER_STATE: "shooter:state",

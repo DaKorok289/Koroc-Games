@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { PLAYER_COLOR_PRESETS } from "@koroc/shared";
+import { PLAYER_COLOR_PRESETS, SHOP_COLORS } from "@koroc/shared";
 import { useGame } from "../context/GameContext";
 
 export function ColorPicker() {
-  const { myColor, setMyColor } = useGame();
+  const { myColor, setMyColor, shop } = useGame();
   const [open, setOpen] = useState(false);
+
+  const ownedShopColors = SHOP_COLORS.filter((c) => shop.owned.includes(c.id));
 
   return (
     <div className="color-picker">
@@ -29,6 +31,21 @@ export function ColorPicker() {
               }}
               type="button"
               aria-label={`Use color ${color}`}
+            />
+          ))}
+          {ownedShopColors.length > 0 && <div className="color-swatch-divider" />}
+          {ownedShopColors.map((item) => (
+            <button
+              key={item.id}
+              className={`color-swatch${item.color === myColor ? " selected" : ""}`}
+              style={{ backgroundColor: item.color }}
+              onClick={() => {
+                setMyColor(item.color);
+                setOpen(false);
+              }}
+              type="button"
+              title={item.label}
+              aria-label={`Use color ${item.label}`}
             />
           ))}
         </div>

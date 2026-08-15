@@ -238,6 +238,13 @@ input:focus {
   border-color: var(--text);
 }
 
+.color-swatch-divider {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--border);
+  margin: 0.15rem 0;
+}
+
 .roster-panel {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -356,6 +363,45 @@ input:focus {
   align-items: center;
   gap: 0.75rem;
   font-size: 0.95rem;
+}
+
+.coin-balance {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.shop-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.shop-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.shop-swatch {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
 }
 
 .badge {
@@ -578,6 +624,17 @@ input:focus {
   gap: 0.75rem;
 }
 
+.tagger-banner {
+  text-align: center;
+  padding: 0.5rem;
+  border-radius: 10px;
+  background: rgba(255, 32, 32, 0.15);
+  border: 1px solid #ff2020;
+  color: #ff8a8a;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
 .arena-canvas-container {
   position: relative;
   border: 1px solid var(--border);
@@ -594,6 +651,77 @@ input:focus {
 .arena-canvas {
   display: block;
   touch-action: none;
+}
+
+.dpad {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, 2.75rem);
+  grid-template-rows: repeat(3, 2.75rem);
+  gap: 0.2rem;
+  z-index: 5;
+  touch-action: none;
+}
+
+.dpad-btn {
+  background: rgba(24, 25, 51, 0.75);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dpad-btn:active {
+  background: rgba(124, 224, 255, 0.35);
+}
+
+.dpad-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dpad-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.dpad-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.dpad-down {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.fire-btn {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 5;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  background: rgba(255, 107, 107, 0.35);
+  border: 2px solid var(--danger);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.fire-btn:active {
+  background: rgba(255, 107, 107, 0.6);
 }
 
 /* Ping Pong bracket */

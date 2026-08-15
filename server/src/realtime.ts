@@ -3,15 +3,17 @@ import { parse as parseCookie } from "cookie";
 import {
   GAME_TYPES,
   PLAYER_COLOR_PRESETS,
+  SHOP_COLORS,
   SOCKET_EVENTS,
   defaultColorForUser,
   type ActiveEvent,
   type GameType,
   type LobbyState,
   type PublicUser,
+  type ShopState,
 } from "@koroc/shared";
 import { AUTH_COOKIE, parseUserFromToken } from "./auth";
-import { getLeaderboard, recordWin } from "./db";
+import { getCoins, getLeaderboard, getOwnedCosmetics, purchaseCosmetic, recordWin } from "./db";
 import { PongTournament } from "./games/pongTournament";
 import { HideAndSeekGame } from "./games/hideAndSeek";
 import { WizardBattleGame } from "./games/wizardBattles";
@@ -42,6 +44,26 @@ function room(eventId: string): string {
 
 function colorFor(userId: number): string {
   return userColors.get(userId) ?? defaultColorForUser(userId);
+}
+
+function shopStateFor(userId: number): ShopState {
+  return { coins: getCoins(userId), owned: getOwnedCosmetics(userId) };
+}
+
+function isValidColorForUser(color: string, userId: number): boolean {
+  if ((PLAYER_COLOR_PRESETS as readonly string[]).includes(color)) return true;
+  const shopColor = SHOP_COLORS.find((c) => c.color === color);
+  if (!shopColor) return false;
+  return getOwnedCosmetics(userId).includes(shopColor.id);
+}
+
+/** Pushes this user's current shop state to every socket they're connected from (e.g.
+ * multiple tabs), since coins/ownership just changed for them. */
+function pushShopState(io: Server, userId: number): void {
+  const state = shopStateFor(userId);
+  for (const [socketId, u] of connectedUsers) {
+    if (u.id === userId) io.to(socketId).emit(SOCKET_EVENTS.SHOP_STATE, state);
+  }
 }
 
 function distinctUsers(): PublicUser[] {
@@ -76,6 +98,7 @@ export function registerRealtime(io: Server): void {
     connectedUsers.set(socket.id, user);
     io.emit(SOCKET_EVENTS.LOBBY_STATE, lobbyState());
     socket.emit(SOCKET_EVENTS.LEADERBOARD_STATE, getLeaderboard());
+    socket.emit(SOCKET_EVENTS.SHOP_STATE, shopStateFor(user.id));
 
     socket.on(SOCKET_EVENTS.ADMIN_START_EVENT, (payload: { gameType: GameType }) => {
       if (!user.isAdmin) {
@@ -143,9 +166,23 @@ export function registerRealtime(io: Server): void {
     });
 
     socket.on(SOCKET_EVENTS.SET_COLOR, (payload: { color: string }) => {
-      if (typeof payload?.color === "string" && (PLAYER_COLOR_PRESETS as readonly string[]).includes(payload.color)) {
+      if (typeof payload?.color === "string" && isValidColorForUser(payload.color, user.id)) {
         userColors.set(user.id, payload.color);
       }
+    });
+
+    socket.on(SOCKET_EVENTS.PURCHASE_COSMETIC, (payload: { cosmeticId: string }) => {
+      const item = SHOP_COLORS.find((c) => c.id === payload?.cosmeticId);
+      if (!item) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Unknown shop item" });
+        return;
+      }
+      const ok = purchaseCosmetic(user.id, item.id, item.price);
+      if (!ok) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Not enough coins (or already owned)" });
+        return;
+      }
+      pushShopState(io, user.id);
     });
 
     socket.on(
@@ -228,7 +265,10 @@ function endEvent(io: Server, eventId: string): void {
   const entry = events.get(eventId);
   if (!entry) return;
   const winnerIds = entry.game.getWinnerUserIds();
-  for (const userId of winnerIds) recordWin(userId, entry.meta.gameType);
+  for (const userId of winnerIds) {
+    recordWin(userId, entry.meta.gameType);
+    pushShopState(io, userId); // their coin balance just changed
+  }
   if (winnerIds.length > 0) io.emit(SOCKET_EVENTS.LEADERBOARD_STATE, getLeaderboard());
   entry.game.destroy();
   events.delete(eventId);
