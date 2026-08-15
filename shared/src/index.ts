@@ -1,8 +1,21 @@
 // Types and constants shared between the server and client.
 
-export type GameType = "ping-pong" | "hide-and-seek" | "wizard-battles" | "shooters";
+export type GameType =
+  | "ping-pong"
+  | "hide-and-seek"
+  | "wizard-battles"
+  | "shooters"
+  | "four-corners"
+  | "hide-and-seek-maze";
 
-export const GAME_TYPES: GameType[] = ["ping-pong", "hide-and-seek", "wizard-battles", "shooters"];
+export const GAME_TYPES: GameType[] = [
+  "ping-pong",
+  "hide-and-seek",
+  "wizard-battles",
+  "shooters",
+  "four-corners",
+  "hide-and-seek-maze",
+];
 
 export const GAME_INFO: Record<GameType, { label: string; description: string; implemented: boolean }> = {
   "ping-pong": {
@@ -23,6 +36,17 @@ export const GAME_INFO: Record<GameType, { label: string; description: string; i
   shooters: {
     label: "Shooters",
     description: "Fast-paced arena shooter with respawns. First to 5 kills wins.",
+    implemented: true,
+  },
+  "four-corners": {
+    label: "4 Corners",
+    description: "A corner is called every 10 seconds — anyone caught there is out. Last one standing wins.",
+    implemented: true,
+  },
+  "hide-and-seek-maze": {
+    label: "Hide & Seek",
+    description:
+      "One seeker, a maze of walls. Get found and you become the new seeker — teleported to the center to start the hunt over. Whoever's seeking when the 3-minute clock runs out loses.",
     implemented: true,
   },
 };
@@ -290,13 +314,83 @@ export interface ShooterState {
 
 export const SHOOTER_HP_START = 100;
 export const SHOOTER_SHOT_DAMAGE = 34;
-export const SHOOTER_FIRE_COOLDOWN_MS = 250; // minimum time between individual shots
+export const SHOOTER_FIRE_COOLDOWN_MS = 500; // minimum time between individual shots
 export const SHOOTER_FIRE_RANGE = 0.55;
 export const SHOOTER_RESPAWN_MS = 2500;
 export const SHOOTER_KILL_TARGET = 5;
 export const SHOOTER_MAX_AMMO = 6;
 export const SHOOTER_RELOAD_MS = 1500; // full reload once ammo hits 0
 export const SHOOTER_HIT_RADIUS_BONUS = 0.015; // forgiveness added to ARENA_PLAYER_RADIUS for hitscan
+
+// -- 4 Corners --
+// Every FOUR_CORNERS_CALL_INTERVAL_MS, the server randomly calls one of the 4 corner
+// zones — anyone standing inside it at that instant is eliminated. Last player left
+// standing wins (if the final call eliminates everyone still alive at once, no one wins).
+
+export interface FourCornersPlayer {
+  id: number;
+  username: string;
+  x: number;
+  y: number;
+  color: string;
+  alive: boolean;
+}
+
+export interface FourCornersState {
+  status: ArenaStatus;
+  countdown: number;
+  players: FourCornersPlayer[];
+  calledCorner: number | null; // index into FOUR_CORNERS_ZONES, most recently called
+  nextCallMs: number; // ms remaining until the next call, for a countdown display
+  winner: ArenaWinner | null;
+}
+
+export const FOUR_CORNERS_CALL_INTERVAL_MS = 10000;
+
+export const FOUR_CORNERS_ZONES: ArenaRect[] = [
+  { x: 0, y: 0, w: 0.25, h: 0.25 },
+  { x: 0.75, y: 0, w: 0.25, h: 0.25 },
+  { x: 0, y: 0.75, w: 0.25, h: 0.25 },
+  { x: 0.75, y: 0.75, w: 0.25, h: 0.25 },
+];
+
+// -- Hide & Seek (maze) --
+// A distinct, much denser obstacle layout from ARENA_WALLS, used only by this game.
+// Tag mechanics match Tag (`hide-and-seek`): touching whoever's seeking passes it to
+// you — except here, becoming the new seeker also teleports you to the center of the
+// map, so you have to re-navigate the maze from scratch each time. Reuses HideSeekPlayer
+// / HideSeekState from Tag since the shape is identical; only the wall layout and the
+// teleport-on-transfer behavior (server-side) differ.
+export const HIDE_SEEK_MAZE_WALLS: ArenaRect[] = [
+  { x: 0.0, y: 0.24, w: 0.22, h: 0.035 },
+  { x: 0.3, y: 0.24, w: 0.22, h: 0.035 },
+  { x: 0.6, y: 0.24, w: 0.22, h: 0.035 },
+  { x: 0.86, y: 0.24, w: 0.14, h: 0.035 },
+
+  { x: 0.0, y: 0.48, w: 0.14, h: 0.035 },
+  { x: 0.22, y: 0.48, w: 0.22, h: 0.035 },
+  { x: 0.6, y: 0.48, w: 0.22, h: 0.035 },
+  { x: 0.86, y: 0.48, w: 0.14, h: 0.035 },
+
+  { x: 0.08, y: 0.72, w: 0.22, h: 0.035 },
+  { x: 0.38, y: 0.72, w: 0.22, h: 0.035 },
+  { x: 0.68, y: 0.72, w: 0.24, h: 0.035 },
+
+  { x: 0.2, y: 0.0, w: 0.035, h: 0.2 },
+  { x: 0.46, y: 0.06, w: 0.035, h: 0.16 },
+  { x: 0.68, y: 0.0, w: 0.035, h: 0.2 },
+
+  { x: 0.14, y: 0.3, w: 0.035, h: 0.2 },
+  { x: 0.34, y: 0.55, w: 0.035, h: 0.2 },
+  { x: 0.58, y: 0.3, w: 0.035, h: 0.2 },
+  { x: 0.8, y: 0.55, w: 0.035, h: 0.2 },
+
+  { x: 0.26, y: 0.8, w: 0.035, h: 0.2 },
+  { x: 0.5, y: 0.76, w: 0.035, h: 0.24 },
+  { x: 0.72, y: 0.8, w: 0.035, h: 0.2 },
+];
+
+export const HIDE_SEEK_MAZE_CENTER = { x: 0.5, y: 0.5 };
 
 // ---- Socket event name constants (avoid typos across client/server) ----
 
@@ -321,6 +415,8 @@ export const SOCKET_EVENTS = {
   HIDE_SEEK_STATE: "hideSeek:state",
   WIZARD_STATE: "wizard:state",
   SHOOTER_STATE: "shooter:state",
+  FOUR_CORNERS_STATE: "fourCorners:state",
+  MAZE_HIDE_SEEK_STATE: "mazeHideSeek:state",
   LEADERBOARD_STATE: "leaderboard:state",
   ERROR: "server:error",
 } as const;

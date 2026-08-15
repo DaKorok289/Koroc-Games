@@ -19,6 +19,12 @@ TypeScript end to end.
   to 5 kills wins. On desktop, aim independently follows your mouse cursor while WASD handles
   movement (a proper twin-stick-style setup); touch uses the unified drag-to-move-and-aim
   scheme.
+- **4 Corners** — open arena, no walls. Every 10 seconds the server calls one of the 4
+  corners; anyone standing in it is out. Last player standing wins.
+- **Hide & Seek** — like Tag, but on a much denser maze of walls, and getting found comes
+  with a twist: the newly-tagged seeker is teleported to the center of the maze, so every
+  handoff means re-navigating from scratch. Whoever's seeking when the 3-minute clock runs
+  out loses.
 
 Every game is admin-controlled: the admin who started it decides when it actually begins (so
 they can wait for more sign-ups), every game screen supports a fullscreen toggle plus canvases
@@ -30,7 +36,8 @@ earns coins, spendable in the lobby's **Shop** on extra character colors, and a 
 ## Stack
 
 - `shared/` — TypeScript types & constants used by both client and server
-- `server/` — Node + Express (auth REST API) + Socket.io (realtime lobby & game state) + SQLite
+- `server/` — Node + Express (auth REST API) + Socket.io (realtime lobby & game state) +
+  SQLite/libSQL
 - `client/` — React + Vite, touch/mouse/keyboard controls, responsive layout for phone/iPad/desktop
 
 ## Running it
@@ -77,11 +84,25 @@ config is needed for LAN play.
   from round 2 onward gets two real players) and plays matches sequentially, advancing winners
   up the bracket automatically. Non-current-match players see a live bracket tree; the two
   current players get full paddle control, matching Ping Pong's original controls.
-- **Tag / Wizard Battles / Shooters**: all three share a normalized 0..1 x 0..1 arena and the
-  same movement model (server-authoritative, 30fps tick) — drag anywhere on the arena or use
-  WASD/arrow keys to move. Spawns always avoid landing inside a wall (`randomSpawn` in
-  `arenaPhysics.ts` retries until it finds a clear spot). Everyone who joins becomes a player
-  (no spectator role); a round needs at least 2 players before the admin can start it.
+- **Tag / Wizard Battles / Shooters / 4 Corners / Hide & Seek**: all five share a normalized
+  0..1 x 0..1 arena and the same movement model (server-authoritative, 30fps tick) — drag
+  anywhere on the arena or use WASD/arrow keys to move. Spawns always avoid landing inside a
+  wall (`randomSpawn` in `arenaPhysics.ts` retries until it finds a clear spot); it and
+  `resolveWallCollision` both take an optional wall-set parameter (defaulting to the shared
+  `ARENA_WALLS`) so a game can supply its own layout — Hide & Seek's maze uses a much denser
+  `HIDE_SEEK_MAZE_WALLS` this way instead of touching the other games' map. Everyone who joins
+  becomes a player (no spectator role); a round needs at least 2 players before the admin can
+  start it.
+- **4 Corners**: no walls — the whole arena is open. Every `FOUR_CORNERS_CALL_INTERVAL_MS`
+  (10s) the server randomly calls one of the four corner zones and eliminates anyone standing
+  inside it at that instant; the called corner flashes for everyone briefly. Last player left
+  alive wins (a tie elimination on the final call means no winner).
+- **Hide & Seek (maze)**: mechanically the same tag-transfer rule as Tag (touch the seeker's
+  target radius to pass it on, with brief immunity so it can't bounce straight back) but on
+  `HIDE_SEEK_MAZE_WALLS` — a much denser layout (`MazeHideAndSeekGame` in
+  `server/src/games/mazeHideAndSeek.ts`) — and with one addition: whoever becomes the new
+  seeker is teleported to the exact center of the maze, so every handoff means re-hunting from
+  scratch instead of continuing from wherever the tag happened.
 - **Combat (Wizard Battles / Shooters)**: aim is directional, not automatic. On touch it
   follows your movement drag; on desktop it independently follows your mouse cursor
   (`useMouseAim`, a separate `arena:aim` event from movement) while WASD still drives
@@ -124,6 +145,17 @@ config is needed for LAN play.
 - **Granting admin on a deployed instance**: set an `ADMIN_USERNAMES` env var (comma-separated
   usernames) on the host. Promotion runs on every server startup, so it takes effect on the
   next deploy/restart — no direct database access needed.
+- **Granting free shop cosmetics on a deployed instance**: same pattern — set
+  `GRANT_ALL_COSMETICS_USERNAMES` (comma-separated usernames) and every listed account gets
+  every `SHOP_COLORS` item for free, re-applied (idempotently) on every startup.
+- **Database persistence**: `server/src/db.ts` uses `@libsql/client`, a SQLite-compatible
+  driver that works two ways. With no config it opens a local file (`file:...`, same format as
+  plain SQLite) — this is what local dev and the always-on launchd service use, no setup
+  needed. In production, set `DATABASE_URL` (and `DATABASE_AUTH_TOKEN`) to point at a hosted
+  [Turso](https://turso.tech) database instead, so leaderboard wins, coins, and shop purchases
+  survive redeploys — Render's free tier disk is ephemeral and wipes a local file on every
+  deploy, which is why this matters. See the comments in `render.yaml` for the exact `turso`
+  CLI commands to get the URL/token.
 
 ## Scripts
 

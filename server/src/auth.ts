@@ -34,11 +34,11 @@ export interface AuthedRequest extends Request {
   user?: PublicUser;
 }
 
-export function parseUserFromToken(token: string | undefined): PublicUser | null {
+export async function parseUserFromToken(token: string | undefined): Promise<PublicUser | null> {
   if (!token) return null;
   try {
     const payload = jwt.verify(token, JWT_SECRET) as { userId: number };
-    const row = findUserById(payload.userId);
+    const row = await findUserById(payload.userId);
     if (!row) return null;
     return toPublicUser(row);
   } catch {
@@ -46,9 +46,9 @@ export function parseUserFromToken(token: string | undefined): PublicUser | null
   }
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   const token = req.cookies?.[AUTH_COOKIE];
-  const user = parseUserFromToken(token);
+  const user = await parseUserFromToken(token);
   if (!user) {
     res.status(401).json({ error: "Not signed in" });
     return;

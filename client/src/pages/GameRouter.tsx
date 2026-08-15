@@ -7,6 +7,8 @@ import { PongGame } from "./games/PongGame";
 import { HideAndSeek } from "./games/HideAndSeek";
 import { WizardBattles } from "./games/WizardBattles";
 import { Shooters } from "./games/Shooters";
+import { FourCorners } from "./games/FourCorners";
+import { HideAndSeekMaze } from "./games/HideAndSeekMaze";
 
 export function GameRouter() {
   const { user } = useAuth();
@@ -46,6 +48,8 @@ export function GameRouter() {
       {event.gameType === "hide-and-seek" && <HideAndSeek eventId={event.id} />}
       {event.gameType === "wizard-battles" && <WizardBattles eventId={event.id} />}
       {event.gameType === "shooters" && <Shooters eventId={event.id} />}
+      {event.gameType === "four-corners" && <FourCorners eventId={event.id} />}
+      {event.gameType === "hide-and-seek-maze" && <HideAndSeekMaze eventId={event.id} />}
     </div>
   );
 }

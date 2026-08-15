@@ -11,3 +11,18 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+      # Render's free tier disk is ephemeral (wiped on every deploy) — without these,
+      # the app falls back to a local SQLite file and loses all users/wins/coins/shop
+      # ownership on every redeploy. Point at a free Turso (libSQL) database instead:
+      # `turso db create koroc-games`, then `turso db show koroc-games --url` and
+      # `turso db tokens create koroc-games` for the two values below. Set them in the
+      # Render dashboard (Environment tab) — sync: false means Render won't overwrite
+      # whatever you enter there.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_AUTH_TOKEN
+        sync: false
+      # Comma-separated usernames to grant every shop cosmetic to for free, re-applied
+      # on every startup. Set in the Render dashboard, e.g. value "DaKorok".
+      - key: GRANT_ALL_COSMETICS_USERNAMES
+        sync: false

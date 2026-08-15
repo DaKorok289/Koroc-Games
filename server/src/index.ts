@@ -6,9 +6,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { authRouter } from "./routes/auth";
 import { registerRealtime } from "./realtime";
-import { promoteAdminsFromEnv } from "./db";
-
-promoteAdminsFromEnv();
+import { initDb, promoteAdminsFromEnv, grantAllCosmeticsFromEnv } from "./db";
 
 const PORT = Number(process.env.PORT) || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
@@ -52,6 +50,13 @@ if (IS_PRODUCTION) {
   });
 }
 
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`Koroc Games server listening on http://0.0.0.0:${PORT}`);
-});
+async function start() {
+  await initDb();
+  await promoteAdminsFromEnv();
+  await grantAllCosmeticsFromEnv();
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`Koroc Games server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+start();

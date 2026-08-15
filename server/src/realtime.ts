@@ -18,12 +18,20 @@ import { PongTournament } from "./games/pongTournament";
 import { HideAndSeekGame } from "./games/hideAndSeek";
 import { WizardBattleGame } from "./games/wizardBattles";
 import { ShooterGame } from "./games/shooters";
+import { FourCornersGame } from "./games/fourCorners";
+import { MazeHideAndSeekGame } from "./games/mazeHideAndSeek";
 
 interface AuthedSocket extends Socket {
   data: { user: PublicUser };
 }
 
-type GameInstance = PongTournament | HideAndSeekGame | WizardBattleGame | ShooterGame;
+type GameInstance =
+  | PongTournament
+  | HideAndSeekGame
+  | WizardBattleGame
+  | ShooterGame
+  | FourCornersGame
+  | MazeHideAndSeekGame;
 
 interface EventEntry {
   meta: ActiveEvent;
@@ -46,21 +54,21 @@ function colorFor(userId: number): string {
   return userColors.get(userId) ?? defaultColorForUser(userId);
 }
 
-function shopStateFor(userId: number): ShopState {
-  return { coins: getCoins(userId), owned: getOwnedCosmetics(userId) };
+async function shopStateFor(userId: number): Promise<ShopState> {
+  return { coins: await getCoins(userId), owned: await getOwnedCosmetics(userId) };
 }
 
-function isValidColorForUser(color: string, userId: number): boolean {
+async function isValidColorForUser(color: string, userId: number): Promise<boolean> {
   if ((PLAYER_COLOR_PRESETS as readonly string[]).includes(color)) return true;
   const shopColor = SHOP_COLORS.find((c) => c.color === color);
   if (!shopColor) return false;
-  return getOwnedCosmetics(userId).includes(shopColor.id);
+  return (await getOwnedCosmetics(userId)).includes(shopColor.id);
 }
 
 /** Pushes this user's current shop state to every socket they're connected from (e.g.
  * multiple tabs), since coins/ownership just changed for them. */
-function pushShopState(io: Server, userId: number): void {
-  const state = shopStateFor(userId);
+async function pushShopState(io: Server, userId: number): Promise<void> {
+  const state = await shopStateFor(userId);
   for (const [socketId, u] of connectedUsers) {
     if (u.id === userId) io.to(socketId).emit(SOCKET_EVENTS.SHOP_STATE, state);
   }
@@ -80,10 +88,10 @@ function lobbyState(): LobbyState {
 }
 
 export function registerRealtime(io: Server): void {
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const raw = socket.request.headers.cookie;
     const cookies = raw ? parseCookie(raw) : {};
-    const user = parseUserFromToken(cookies[AUTH_COOKIE]);
+    const user = await parseUserFromToken(cookies[AUTH_COOKIE]);
     if (!user) {
       next(new Error("unauthorized"));
       return;
@@ -92,13 +100,13 @@ export function registerRealtime(io: Server): void {
     next();
   });
 
-  io.on("connection", (socket: Socket) => {
+  io.on("connection", async (socket: Socket) => {
     const s = socket as AuthedSocket;
     const user = s.data.user;
     connectedUsers.set(socket.id, user);
     io.emit(SOCKET_EVENTS.LOBBY_STATE, lobbyState());
-    socket.emit(SOCKET_EVENTS.LEADERBOARD_STATE, getLeaderboard());
-    socket.emit(SOCKET_EVENTS.SHOP_STATE, shopStateFor(user.id));
+    socket.emit(SOCKET_EVENTS.LEADERBOARD_STATE, await getLeaderboard());
+    socket.emit(SOCKET_EVENTS.SHOP_STATE, await shopStateFor(user.id));
 
     socket.on(SOCKET_EVENTS.ADMIN_START_EVENT, (payload: { gameType: GameType }) => {
       if (!user.isAdmin) {
@@ -120,7 +128,7 @@ export function registerRealtime(io: Server): void {
       eventCounter += 1;
       const id = `evt-${eventCounter}`;
       const meta: ActiveEvent = { id, gameType: payload.gameType, startedBy: user.username, playerCount: 0 };
-      const onEnd = () => endEvent(io, id);
+      const onEnd = () => endEvent(io, id).catch((err) => console.error("endEvent failed", err));
 
       let game: GameInstance;
       switch (payload.gameType) {
@@ -136,6 +144,15 @@ export function registerRealtime(io: Server): void {
         case "shooters":
           game = new ShooterGame(io, SOCKET_EVENTS.SHOOTER_STATE, onEnd);
           break;
+        case "four-corners":
+          game = new FourCornersGame((state) => io.to(room(id)).emit(SOCKET_EVENTS.FOUR_CORNERS_STATE, state), onEnd);
+          break;
+        case "hide-and-seek-maze":
+          game = new MazeHideAndSeekGame(
+            (state) => io.to(room(id)).emit(SOCKET_EVENTS.MAZE_HIDE_SEEK_STATE, state),
+            onEnd,
+          );
+          break;
       }
 
       events.set(id, { meta, game });
@@ -148,7 +165,7 @@ export function registerRealtime(io: Server): void {
         return;
       }
       if (!events.has(payload?.eventId)) return;
-      endEvent(io, payload.eventId);
+      endEvent(io, payload.eventId).catch((err) => console.error("endEvent failed", err));
     });
 
     // Only the specific admin who created an event can start it — everyone else just
@@ -165,24 +182,24 @@ export function registerRealtime(io: Server): void {
       }
     });
 
-    socket.on(SOCKET_EVENTS.SET_COLOR, (payload: { color: string }) => {
-      if (typeof payload?.color === "string" && isValidColorForUser(payload.color, user.id)) {
+    socket.on(SOCKET_EVENTS.SET_COLOR, async (payload: { color: string }) => {
+      if (typeof payload?.color === "string" && (await isValidColorForUser(payload.color, user.id))) {
         userColors.set(user.id, payload.color);
       }
     });
 
-    socket.on(SOCKET_EVENTS.PURCHASE_COSMETIC, (payload: { cosmeticId: string }) => {
+    socket.on(SOCKET_EVENTS.PURCHASE_COSMETIC, async (payload: { cosmeticId: string }) => {
       const item = SHOP_COLORS.find((c) => c.id === payload?.cosmeticId);
       if (!item) {
         socket.emit(SOCKET_EVENTS.ERROR, { message: "Unknown shop item" });
         return;
       }
-      const ok = purchaseCosmetic(user.id, item.id, item.price);
+      const ok = await purchaseCosmetic(user.id, item.id, item.price);
       if (!ok) {
         socket.emit(SOCKET_EVENTS.ERROR, { message: "Not enough coins (or already owned)" });
         return;
       }
-      pushShopState(io, user.id);
+      await pushShopState(io, user.id);
     });
 
     socket.on(
@@ -226,7 +243,13 @@ export function registerRealtime(io: Server): void {
     socket.on(SOCKET_EVENTS.ARENA_INPUT, (payload: { eventId: string; dx: number; dy: number }) => {
       const entry = events.get(payload?.eventId);
       if (!entry || typeof payload?.dx !== "number" || typeof payload?.dy !== "number") return;
-      if (entry.game instanceof HideAndSeekGame || entry.game instanceof WizardBattleGame || entry.game instanceof ShooterGame) {
+      if (
+        entry.game instanceof HideAndSeekGame ||
+        entry.game instanceof WizardBattleGame ||
+        entry.game instanceof ShooterGame ||
+        entry.game instanceof FourCornersGame ||
+        entry.game instanceof MazeHideAndSeekGame
+      ) {
         entry.game.handleInput(socket.id, payload.dx, payload.dy);
       }
     });
@@ -261,15 +284,15 @@ export function registerRealtime(io: Server): void {
   });
 }
 
-function endEvent(io: Server, eventId: string): void {
+async function endEvent(io: Server, eventId: string): Promise<void> {
   const entry = events.get(eventId);
   if (!entry) return;
   const winnerIds = entry.game.getWinnerUserIds();
   for (const userId of winnerIds) {
-    recordWin(userId, entry.meta.gameType);
-    pushShopState(io, userId); // their coin balance just changed
+    await recordWin(userId, entry.meta.gameType);
+    await pushShopState(io, userId); // their coin balance just changed
   }
-  if (winnerIds.length > 0) io.emit(SOCKET_EVENTS.LEADERBOARD_STATE, getLeaderboard());
+  if (winnerIds.length > 0) io.emit(SOCKET_EVENTS.LEADERBOARD_STATE, await getLeaderboard());
   entry.game.destroy();
   events.delete(eventId);
   io.to(room(eventId)).emit(SOCKET_EVENTS.EVENT_ENDED, { eventId });

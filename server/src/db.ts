@@ -1,43 +1,18 @@
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import path from "path";
-import { COINS_PER_WIN } from "@koroc/shared";
+import { COINS_PER_WIN, SHOP_COLORS } from "@koroc/shared";
 
+// Local dev / no config: SQLite file on disk (via libSQL's local-file mode, same file
+// format as plain SQLite). Production: point DATABASE_URL at a Turso database (a hosted,
+// SQLite-compatible libSQL instance with real persistent storage — unlike Render's free
+// tier disk, which is wiped on every redeploy) so leaderboard/coin/cosmetic progress
+// survives across versions.
 const dbPath = path.join(__dirname, "..", "data.sqlite3");
-export const db = new Database(dbPath);
+const url = process.env.DATABASE_URL || `file:${dbPath}`;
+const authToken = process.env.DATABASE_AUTH_TOKEN;
+const isLocalFile = url.startsWith("file:");
 
-db.pragma("journal_mode = WAL");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    salt TEXT NOT NULL,
-    is_admin INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS wins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    game_type TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS user_cosmetics (
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    cosmetic_id TEXT NOT NULL,
-    purchased_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, cosmetic_id)
-  );
-`);
-
-// SQLite has no "ADD COLUMN IF NOT EXISTS" — check first so this stays safe to run on
-// every startup against a database that already has the column.
-const userColumns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-if (!userColumns.some((c) => c.name === "coins")) {
-  db.exec("ALTER TABLE users ADD COLUMN coins INTEGER NOT NULL DEFAULT 0");
-}
+export const db = createClient(authToken ? { url, authToken } : { url });
 
 export interface UserRow {
   id: number;
@@ -48,65 +23,128 @@ export interface UserRow {
   created_at: string;
 }
 
-export function getUserCount(): number {
-  const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
-  return row.count;
+export async function initDb(): Promise<void> {
+  if (isLocalFile) {
+    // Not supported/needed against a remote Turso database (it manages this itself).
+    await db.execute("PRAGMA journal_mode = WAL");
+  }
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS wins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      game_type TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_cosmetics (
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      cosmetic_id TEXT NOT NULL,
+      purchased_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, cosmetic_id)
+    )
+  `);
+
+  // SQLite has no "ADD COLUMN IF NOT EXISTS" — check first so this stays safe to run on
+  // every startup against a database that already has the column.
+  const userColumns = await db.execute("PRAGMA table_info(users)");
+  const hasCoins = userColumns.rows.some((c) => c.name === "coins");
+  if (!hasCoins) {
+    await db.execute("ALTER TABLE users ADD COLUMN coins INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
-export function findUserByUsername(username: string): UserRow | undefined {
-  return db.prepare("SELECT * FROM users WHERE username = ?").get(username) as UserRow | undefined;
+export async function getUserCount(): Promise<number> {
+  const result = await db.execute("SELECT COUNT(*) as count FROM users");
+  return Number(result.rows[0]?.count ?? 0);
 }
 
-export function findUserById(id: number): UserRow | undefined {
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
+export async function findUserByUsername(username: string): Promise<UserRow | undefined> {
+  const result = await db.execute({ sql: "SELECT * FROM users WHERE username = ?", args: [username] });
+  return (result.rows[0] as unknown as UserRow | undefined) ?? undefined;
 }
 
-export function createUser(username: string, passwordHash: string, salt: string, isAdmin: boolean): UserRow {
-  const info = db
-    .prepare("INSERT INTO users (username, password_hash, salt, is_admin) VALUES (?, ?, ?, ?)")
-    .run(username, passwordHash, salt, isAdmin ? 1 : 0);
-  return findUserById(Number(info.lastInsertRowid))!;
+export async function findUserById(id: number): Promise<UserRow | undefined> {
+  const result = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] });
+  return (result.rows[0] as unknown as UserRow | undefined) ?? undefined;
 }
 
-export function recordWin(userId: number, gameType: string): void {
-  db.prepare("INSERT INTO wins (user_id, game_type) VALUES (?, ?)").run(userId, gameType);
-  addCoins(userId, COINS_PER_WIN);
+export async function createUser(
+  username: string,
+  passwordHash: string,
+  salt: string,
+  isAdmin: boolean,
+): Promise<UserRow> {
+  const result = await db.execute({
+    sql: "INSERT INTO users (username, password_hash, salt, is_admin) VALUES (?, ?, ?, ?)",
+    args: [username, passwordHash, salt, isAdmin ? 1 : 0],
+  });
+  const row = await findUserById(Number(result.lastInsertRowid));
+  return row!;
 }
 
-export function addCoins(userId: number, amount: number): void {
-  db.prepare("UPDATE users SET coins = coins + ? WHERE id = ?").run(amount, userId);
+export async function recordWin(userId: number, gameType: string): Promise<void> {
+  await db.execute({ sql: "INSERT INTO wins (user_id, game_type) VALUES (?, ?)", args: [userId, gameType] });
+  await addCoins(userId, COINS_PER_WIN);
 }
 
-export function getCoins(userId: number): number {
-  const row = db.prepare("SELECT coins FROM users WHERE id = ?").get(userId) as { coins: number } | undefined;
-  return row?.coins ?? 0;
+export async function addCoins(userId: number, amount: number): Promise<void> {
+  await db.execute({ sql: "UPDATE users SET coins = coins + ? WHERE id = ?", args: [amount, userId] });
 }
 
-export function getOwnedCosmetics(userId: number): string[] {
-  const rows = db.prepare("SELECT cosmetic_id FROM user_cosmetics WHERE user_id = ?").all(userId) as {
-    cosmetic_id: string;
-  }[];
-  return rows.map((r) => r.cosmetic_id);
+export async function getCoins(userId: number): Promise<number> {
+  const result = await db.execute({ sql: "SELECT coins FROM users WHERE id = ?", args: [userId] });
+  return result.rows[0] ? Number(result.rows[0].coins) : 0;
+}
+
+export async function getOwnedCosmetics(userId: number): Promise<string[]> {
+  const result = await db.execute({
+    sql: "SELECT cosmetic_id FROM user_cosmetics WHERE user_id = ?",
+    args: [userId],
+  });
+  return result.rows.map((r) => String(r.cosmetic_id));
 }
 
 /** Atomically deducts coins and grants ownership. Returns false on insufficient funds
  * or if already owned — never partially applies. */
-export function purchaseCosmetic(userId: number, cosmeticId: string, price: number): boolean {
-  const alreadyOwned = db
-    .prepare("SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ?")
-    .get(userId, cosmeticId);
-  if (alreadyOwned) return false;
-
-  const purchase = db.transaction(() => {
-    const result = db.prepare("UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?").run(price, userId, price);
-    if (result.changes === 0) throw new Error("insufficient funds");
-    db.prepare("INSERT INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)").run(userId, cosmeticId);
+export async function purchaseCosmetic(userId: number, cosmeticId: string, price: number): Promise<boolean> {
+  const already = await db.execute({
+    sql: "SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ?",
+    args: [userId, cosmeticId],
   });
+  if (already.rows.length > 0) return false;
 
+  const tx = await db.transaction("write");
   try {
-    purchase();
+    const result = await tx.execute({
+      sql: "UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?",
+      args: [price, userId, price],
+    });
+    if (result.rowsAffected === 0) {
+      await tx.rollback();
+      return false;
+    }
+    await tx.execute({
+      sql: "INSERT INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)",
+      args: [userId, cosmeticId],
+    });
+    await tx.commit();
     return true;
   } catch {
+    await tx.rollback();
     return false;
   }
 }
@@ -117,34 +155,64 @@ export interface LeaderboardRow {
   wins: number;
 }
 
-export function getLeaderboard(): LeaderboardRow[] {
-  return db
-    .prepare(
-      `SELECT users.id as userId, users.username as username, COUNT(wins.id) as wins
-       FROM users
-       LEFT JOIN wins ON wins.user_id = users.id
-       GROUP BY users.id
-       HAVING wins > 0
-       ORDER BY wins DESC, users.username ASC`,
-    )
-    .all() as LeaderboardRow[];
+export async function getLeaderboard(): Promise<LeaderboardRow[]> {
+  const result = await db.execute(
+    `SELECT users.id as userId, users.username as username, COUNT(wins.id) as wins
+     FROM users
+     LEFT JOIN wins ON wins.user_id = users.id
+     GROUP BY users.id
+     HAVING wins > 0
+     ORDER BY wins DESC, users.username ASC`,
+  );
+  return result.rows.map((r) => ({
+    userId: Number(r.userId),
+    username: String(r.username),
+    wins: Number(r.wins),
+  }));
 }
 
 // Promotes usernames listed in ADMIN_USERNAMES (comma-separated) to admin on every
 // startup. Lets us grant admin on a deployed instance via an env var, without needing
 // direct database/shell access. No-op for names that haven't registered yet.
-export function promoteAdminsFromEnv(): void {
+export async function promoteAdminsFromEnv(): Promise<void> {
   const raw = process.env.ADMIN_USERNAMES;
   if (!raw) return;
   const usernames = raw
     .split(",")
     .map((u) => u.trim())
     .filter(Boolean);
-  const promote = db.prepare("UPDATE users SET is_admin = 1 WHERE username = ?");
   for (const username of usernames) {
-    const result = promote.run(username);
-    if (result.changes > 0) {
+    const result = await db.execute({ sql: "UPDATE users SET is_admin = 1 WHERE username = ?", args: [username] });
+    if (result.rowsAffected > 0) {
       console.log(`Promoted "${username}" to admin via ADMIN_USERNAMES`);
+    }
+  }
+}
+
+// Grants every SHOP_COLORS cosmetic (for free, no coin deduction) to usernames listed in
+// GRANT_ALL_COSMETICS_USERNAMES (comma-separated). Same env-var-driven pattern as
+// promoteAdminsFromEnv — runs on every startup, idempotent, no-op for names that haven't
+// registered yet.
+export async function grantAllCosmeticsFromEnv(): Promise<void> {
+  const raw = process.env.GRANT_ALL_COSMETICS_USERNAMES;
+  if (!raw) return;
+  const usernames = raw
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+  for (const username of usernames) {
+    const user = await findUserByUsername(username);
+    if (!user) continue;
+    let grantedAny = false;
+    for (const item of SHOP_COLORS) {
+      const result = await db.execute({
+        sql: "INSERT OR IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)",
+        args: [user.id, item.id],
+      });
+      if (result.rowsAffected > 0) grantedAny = true;
+    }
+    if (grantedAny) {
+      console.log(`Granted all shop cosmetics to "${username}" via GRANT_ALL_COSMETICS_USERNAMES`);
     }
   }
 }

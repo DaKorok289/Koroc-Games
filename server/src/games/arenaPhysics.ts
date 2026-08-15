@@ -9,15 +9,15 @@ function circleIntersectsRect(cx: number, cy: number, radius: number, rect: Aren
 }
 
 /** Random spawn point that never lands inside (or overlapping) a wall. */
-export function randomSpawn(radius: number): { x: number; y: number } {
+export function randomSpawn(radius: number, walls: ArenaRect[] = ARENA_WALLS): { x: number; y: number } {
   for (let attempt = 0; attempt < 50; attempt++) {
     const x = Math.random() * 0.8 + 0.1;
     const y = Math.random() * 0.8 + 0.1;
-    if (!ARENA_WALLS.some((wall) => circleIntersectsRect(x, y, radius, wall))) {
+    if (!walls.some((wall) => circleIntersectsRect(x, y, radius, wall))) {
       return { x, y };
     }
   }
-  return { x: 0.5, y: 0.5 }; // fallback — center is clear in the current layout
+  return { x: 0.5, y: 0.5 }; // fallback — center is clear in every current layout
 }
 
 /** Axis-separated sliding collision: try the full move, then X-only, then Y-only. */
@@ -27,8 +27,9 @@ export function resolveWallCollision(
   newX: number,
   newY: number,
   radius: number,
+  walls: ArenaRect[] = ARENA_WALLS,
 ): { x: number; y: number } {
-  const blocked = (cx: number, cy: number) => ARENA_WALLS.some((wall) => circleIntersectsRect(cx, cy, radius, wall));
+  const blocked = (cx: number, cy: number) => walls.some((wall) => circleIntersectsRect(cx, cy, radius, wall));
   if (!blocked(newX, newY)) return { x: newX, y: newY };
   if (!blocked(newX, y)) return { x: newX, y };
   if (!blocked(x, newY)) return { x, y: newY };
