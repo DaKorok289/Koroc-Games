@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PONG_PADDLE_HEIGHT, SOCKET_EVENTS, type PongSide, type PongState } from "@koroc/shared";
 import { useSocket } from "../../context/SocketContext";
+import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 
 type Role = PongSide | "spectator" | null;
 
@@ -89,24 +90,7 @@ export function PongGame() {
   }, []);
 
   // Keep the canvas sized to its container (responsive across phone/tablet/desktop).
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-    const resize = () => {
-      const rect = container.getBoundingClientRect();
-      if (rect.width < 1 || rect.height < 1) return; // layout not settled yet — wait for the next observed resize
-      const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap backing-store size on high-DPI phones
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-    };
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
+  useResizableCanvas(canvasRef, containerRef);
 
   // Pointer (mouse + touch) control: drag anywhere on your half to move your paddle.
   useEffect(() => {

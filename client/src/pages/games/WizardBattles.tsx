@@ -1,0 +1,136 @@
+import { useEffect, useRef, useState } from "react";
+import { SOCKET_EVENTS, type WizardBattleState } from "@koroc/shared";
+import { useSocket } from "../../context/SocketContext";
+import { useAuth } from "../../context/AuthContext";
+import { useResizableCanvas } from "../../hooks/useResizableCanvas";
+import { useArenaMovement } from "../../hooks/useArenaMovement";
+
+const BG = "#0f1020";
+const WIZARD_COLOR = "#b48bff";
+const BOLT_COLOR = "#ffd166";
+const YOU_RING = "#7ce0ff";
+const HP_BAR_BG = "#2c2f5c";
+const HP_BAR_FILL = "#5ce87a";
+
+export function WizardBattles() {
+  const socket = useSocket();
+  const { user } = useAuth();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const stateRef = useRef<WizardBattleState | null>(null);
+  const [displayState, setDisplayState] = useState<WizardBattleState | null>(null);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_JOIN, {});
+    return () => {
+      socket.emit(SOCKET_EVENTS.GAME_LEAVE);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!socket) return;
+    let lastUiSync = 0;
+    const onState = (state: WizardBattleState) => {
+      const prevStatus = stateRef.current?.status;
+      stateRef.current = state;
+      const now = performance.now();
+      if (now - lastUiSync > 200 || state.status !== prevStatus) {
+        lastUiSync = now;
+        setDisplayState(state);
+      }
+    };
+    socket.on(SOCKET_EVENTS.WIZARD_STATE, onState);
+    return () => {
+      socket.off(SOCKET_EVENTS.WIZARD_STATE, onState);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    let raf = 0;
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const canvas = canvasRef.current;
+      const state = stateRef.current;
+      if (!canvas || !state) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const { width, height } = canvas;
+
+      ctx.fillStyle = BG;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = BOLT_COLOR;
+      for (const bolt of state.bolts) {
+        ctx.beginPath();
+        ctx.arc(bolt.x * width, bolt.y * height, width * 0.008, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const r = width * 0.025;
+      for (const player of state.players) {
+        if (!player.alive) continue;
+        const px = player.x * width;
+        const py = player.y * height;
+
+        if (player.id === user?.id) {
+          ctx.strokeStyle = YOU_RING;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(px, py, r + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = WIZARD_COLOR;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        const barW = r * 2.4;
+        const barX = px - barW / 2;
+        const barY = py - r - 16;
+        ctx.fillStyle = HP_BAR_BG;
+        ctx.fillRect(barX, barY, barW, 4);
+        ctx.fillStyle = HP_BAR_FILL;
+        ctx.fillRect(barX, barY, barW * (player.hp / 100), 4);
+
+        ctx.fillStyle = "#f2f3ff";
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(player.username, px, py - r - 20);
+      }
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [user?.id]);
+
+  useResizableCanvas(canvasRef, containerRef);
+  useArenaMovement(socket, canvasRef);
+
+  const status = displayState?.status ?? "waiting";
+  const me = displayState?.players.find((p) => p.id === user?.id);
+
+  return (
+    <div className="arena-wrap">
+      <div className="arena-scoreboard">
+        <span>{displayState ? `${displayState.players.filter((p) => p.alive).length} alive` : "waiting…"}</span>
+        <span className="score">{me ? `${me.hp} HP` : ""}</span>
+        <span>{me && !me.alive ? "Eliminated — spectating" : ""}</span>
+      </div>
+
+      <div className="arena-canvas-container" ref={containerRef}>
+        <canvas ref={canvasRef} className="arena-canvas" />
+        {status === "waiting" && <div className="pong-overlay">Waiting for at least 2 wizards…</div>}
+        {status === "countdown" && <div className="pong-overlay big">{displayState?.countdown}</div>}
+        {status === "finished" && (
+          <div className="pong-overlay">{displayState?.winner ? `${displayState.winner.username} wins!` : "Draw!"}</div>
+        )}
+      </div>
+
+      <p className="pong-role">
+        Drag on the arena or use WASD / Arrow keys to move. Your wizard auto-casts at the nearest
+        opponent — position yourself and dodge incoming bolts. Last wizard standing wins.
+      </p>
+    </div>
+  );
+}

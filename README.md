@@ -4,8 +4,11 @@ A browser-based party game hub: sign in, land in a lobby, and an admin can kick 
 minigame events that everyone gets pulled into. Built with TypeScript end to end.
 
 - **Ping Pong** — fully playable, 2 players + spectators, server-authoritative physics
-- **Hide & Seek**, **Wizard Battles**, **Shooters** — wired into the same start/join/end
-  event flow as placeholders, ready to fill in with real gameplay next
+- **Hide & Seek** — one random seeker (slightly faster) tags hiders by proximity; hiders win
+  by surviving the clock
+- **Wizard Battles** — free movement, auto-casts at the nearest opponent; last wizard standing
+  wins
+- **Shooters** — free movement, hitscan auto-fire with respawns; first to 5 kills wins
 
 ## Stack
 
@@ -47,6 +50,11 @@ config is needed for LAN play.
 - **Ping Pong**: server runs the physics loop (ball, paddles, scoring) at 60fps and broadcasts
   state; clients just render and send paddle position. First two joiners become players,
   everyone else spectates. Controls: drag/touch on your half, or arrow keys / W-S.
+- **Hide & Seek / Wizard Battles / Shooters**: all three share a normalized 0..1 x 0..1 arena
+  and the same movement model (server-authoritative, 30fps tick) — drag anywhere on the arena
+  or use WASD/arrow keys to move; combat (tagging, spell casts, gunfire) is all automatic based
+  on proximity, so the only input needed is positioning. Everyone who joins becomes a player
+  (no spectator role); a round needs at least 2 players to start.
 - **Granting admin on a deployed instance**: set an `ADMIN_USERNAMES` env var (comma-separated
   usernames) on the host. Promotion runs on every server startup, so it takes effect on the
   next deploy/restart — no direct database access needed.
@@ -64,8 +72,6 @@ config is needed for LAN play.
 2. Server-side game logic goes in `server/src/games/<name>.ts`, wired up in
    `server/src/realtime.ts` next to the Ping Pong example.
 3. Client-side screen goes in `client/src/pages/games/<Name>.tsx`, added to the switch in
-   `client/src/pages/GameRouter.tsx`.
-
-Until step 2/3 are done for a game type, admins can still "start" it — players just see the
-"Coming soon" placeholder screen, so the lobby → event → return-to-lobby flow works end to end
-even before a game has real gameplay.
+   `client/src/pages/GameRouter.tsx`. For an arena-style game (free 2D movement), reuse the
+   `useArenaMovement` and `useResizableCanvas` hooks in `client/src/hooks/` rather than
+   reimplementing input/resize handling.

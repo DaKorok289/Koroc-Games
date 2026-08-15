@@ -2,7 +2,9 @@ import { GAME_INFO } from "@koroc/shared";
 import { useAuth } from "../context/AuthContext";
 import { useGame } from "../context/GameContext";
 import { PongGame } from "./games/PongGame";
-import { ComingSoon } from "./games/ComingSoon";
+import { HideAndSeek } from "./games/HideAndSeek";
+import { WizardBattles } from "./games/WizardBattles";
+import { Shooters } from "./games/Shooters";
 
 export function GameRouter() {
   const { user } = useAuth();
@@ -25,7 +27,10 @@ export function GameRouter() {
         )}
       </header>
 
-      {activeEvent.gameType === "ping-pong" ? <PongGame /> : <ComingSoon gameType={activeEvent.gameType} />}
+      {activeEvent.gameType === "ping-pong" && <PongGame />}
+      {activeEvent.gameType === "hide-and-seek" && <HideAndSeek />}
+      {activeEvent.gameType === "wizard-battles" && <WizardBattles />}
+      {activeEvent.gameType === "shooters" && <Shooters />}
     </div>
   );
 }
