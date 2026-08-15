@@ -47,6 +47,9 @@ config is needed for LAN play.
 - **Ping Pong**: server runs the physics loop (ball, paddles, scoring) at 60fps and broadcasts
   state; clients just render and send paddle position. First two joiners become players,
   everyone else spectates. Controls: drag/touch on your half, or arrow keys / W-S.
+- **Granting admin on a deployed instance**: set an `ADMIN_USERNAMES` env var (comma-separated
+  usernames) on the host. Promotion runs on every server startup, so it takes effect on the
+  next deploy/restart — no direct database access needed.
 
 ## Scripts
 

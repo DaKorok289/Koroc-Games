@@ -45,3 +45,22 @@ export function createUser(username: string, passwordHash: string, salt: string,
     .run(username, passwordHash, salt, isAdmin ? 1 : 0);
   return findUserById(Number(info.lastInsertRowid))!;
 }
+
+// Promotes usernames listed in ADMIN_USERNAMES (comma-separated) to admin on every
+// startup. Lets us grant admin on a deployed instance via an env var, without needing
+// direct database/shell access. No-op for names that haven't registered yet.
+export function promoteAdminsFromEnv(): void {
+  const raw = process.env.ADMIN_USERNAMES;
+  if (!raw) return;
+  const usernames = raw
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+  const promote = db.prepare("UPDATE users SET is_admin = 1 WHERE username = ?");
+  for (const username of usernames) {
+    const result = promote.run(username);
+    if (result.changes > 0) {
+      console.log(`Promoted "${username}" to admin via ADMIN_USERNAMES`);
+    }
+  }
+}

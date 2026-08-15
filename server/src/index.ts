@@ -6,7 +6,9 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { authRouter } from "./routes/auth";
 import { registerRealtime } from "./realtime";
-import "./db";
+import { promoteAdminsFromEnv } from "./db";
+
+promoteAdminsFromEnv();
 
 const PORT = Number(process.env.PORT) || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
