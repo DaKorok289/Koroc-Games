@@ -1,11 +1,11 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
-import type { PublicUser } from "@korok/shared";
+import type { PublicUser } from "@koroc/shared";
 import { findUserById, type UserRow } from "./db";
 
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
-export const AUTH_COOKIE = "korok_session";
+export const AUTH_COOKIE = "koroc_session";
 
 export function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, 64).toString("hex");

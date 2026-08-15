@@ -19,7 +19,7 @@ export function AuthPage() {
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <h1 className="brand">🎮 Korok Games</h1>
+        <h1 className="brand">🎮 Koroc Games</h1>
         <p className="subtitle">Sign in and jump into the lobby.</p>
 
         <div className="tabs">

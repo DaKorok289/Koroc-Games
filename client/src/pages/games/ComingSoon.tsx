@@ -1,4 +1,4 @@
-import { GAME_INFO, type GameType } from "@korok/shared";
+import { GAME_INFO, type GameType } from "@koroc/shared";
 
 const EMOJI: Record<GameType, string> = {
   "ping-pong": "🏓",

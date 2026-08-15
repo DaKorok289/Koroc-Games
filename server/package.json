@@ -1,5 +1,5 @@
 {
-  "name": "@korok/server",
+  "name": "@koroc/server",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@korok/shared": "*",
+    "@koroc/shared": "*",
     "better-sqlite3": "^11.3.0",
     "cookie": "^0.6.0",
     "cookie-parser": "^1.4.6",

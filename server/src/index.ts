@@ -51,5 +51,5 @@ if (IS_PRODUCTION) {
 }
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`Korok Games server listening on http://0.0.0.0:${PORT}`);
+  console.log(`Koroc Games server listening on http://0.0.0.0:${PORT}`);
 });

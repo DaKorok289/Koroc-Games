@@ -7,7 +7,7 @@ import {
   type GameType,
   type LobbyState,
   type PublicUser,
-} from "@korok/shared";
+} from "@koroc/shared";
 import { AUTH_COOKIE, parseUserFromToken } from "./auth";
 import { PongGame } from "./games/pong";
 

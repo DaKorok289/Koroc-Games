@@ -1,4 +1,4 @@
-import { GAME_INFO } from "@korok/shared";
+import { GAME_INFO } from "@koroc/shared";
 import { useAuth } from "../context/AuthContext";
 import { useGame } from "../context/GameContext";
 import { PongGame } from "./games/PongGame";

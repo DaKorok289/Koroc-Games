@@ -4,7 +4,7 @@ import {
   type PongSide,
   type PongState,
   type PublicUser,
-} from "@korok/shared";
+} from "@koroc/shared";
 
 const PADDLE_X_LEFT = 0.03;
 const PADDLE_X_RIGHT = 0.97;

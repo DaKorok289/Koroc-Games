@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { PublicUser } from "@korok/shared";
+import type { PublicUser } from "@koroc/shared";
 import { SERVER_URL } from "../config";
 
 interface AuthContextValue {

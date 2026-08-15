@@ -1,4 +1,4 @@
-import { GAME_INFO, GAME_TYPES } from "@korok/shared";
+import { GAME_INFO, GAME_TYPES } from "@koroc/shared";
 import { useAuth } from "../context/AuthContext";
 import { useGame } from "../context/GameContext";
 
@@ -9,7 +9,7 @@ export function Lobby() {
   return (
     <div className="lobby-screen">
       <header className="lobby-header">
-        <h1 className="brand">🎮 Korok Games</h1>
+        <h1 className="brand">🎮 Koroc Games</h1>
         <div className="who-am-i">
           <span>
             {user?.username}

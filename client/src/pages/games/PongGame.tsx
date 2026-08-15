@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PONG_PADDLE_HEIGHT, SOCKET_EVENTS, type PongSide, type PongState } from "@korok/shared";
+import { PONG_PADDLE_HEIGHT, SOCKET_EVENTS, type PongSide, type PongState } from "@koroc/shared";
 import { useSocket } from "../../context/SocketContext";
 
 type Role = PongSide | "spectator" | null;

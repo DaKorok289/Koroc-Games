@@ -1,4 +1,4 @@
-# Korok Games
+# Koroc Games
 
 A browser-based party game hub: sign in, land in a lobby, and an admin can kick off
 minigame events that everyone gets pulled into. Built with TypeScript end to end.

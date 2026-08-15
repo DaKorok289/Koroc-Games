@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { SOCKET_EVENTS, type ActiveEvent, type GameType, type PublicUser } from "@korok/shared";
+import { SOCKET_EVENTS, type ActiveEvent, type GameType, type PublicUser } from "@koroc/shared";
 import { useSocket } from "./SocketContext";
 
 interface GameContextValue {
