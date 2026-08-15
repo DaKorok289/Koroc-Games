@@ -53,12 +53,10 @@ export class PongGame {
     if (!this.playerSockets.left) {
       this.playerSockets.left = socketId;
       this.state.players.left = user;
-      this.maybeStartCountdown();
       result = "left";
     } else if (!this.playerSockets.right) {
       this.playerSockets.right = socketId;
       this.state.players.right = user;
-      this.maybeStartCountdown();
       result = "right";
     } else {
       this.spectatorSockets.add(socketId);
@@ -103,23 +101,26 @@ export class PongGame {
     this.state.paddles[side] = clamped;
   }
 
-  private maybeStartCountdown(): void {
-    if (this.playerSockets.left && this.playerSockets.right && this.state.status === "waiting") {
-      this.state.status = "countdown";
-      this.state.countdown = COUNTDOWN_SECONDS;
-      this.onUpdate(this.state);
-      this.stopCountdown();
-      this.countdownHandle = setInterval(() => {
-        this.state.countdown -= 1;
-        if (this.state.countdown <= 0) {
-          this.stopCountdown();
-          this.beginRally(Math.random() > 0.5 ? 1 : -1);
-          this.state.status = "playing";
-          this.startLoop();
-        }
-        this.onUpdate(this.state);
-      }, 1000);
+  /** Admin-triggered: begins the countdown once both seats are filled. */
+  requestStart(): boolean {
+    if (this.state.status !== "waiting" || !this.playerSockets.left || !this.playerSockets.right) {
+      return false;
     }
+    this.state.status = "countdown";
+    this.state.countdown = COUNTDOWN_SECONDS;
+    this.onUpdate(this.state);
+    this.stopCountdown();
+    this.countdownHandle = setInterval(() => {
+      this.state.countdown -= 1;
+      if (this.state.countdown <= 0) {
+        this.stopCountdown();
+        this.beginRally(Math.random() > 0.5 ? 1 : -1);
+        this.state.status = "playing";
+        this.startLoop();
+      }
+      this.onUpdate(this.state);
+    }, 1000);
+    return true;
   }
 
   private stopCountdown(): void {

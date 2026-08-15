@@ -63,6 +63,30 @@ export interface PongState {
 
 export const PONG_WIN_SCORE = 7;
 
+// ---- Ping Pong tournament bracket ----
+
+export interface PongBracketMatch {
+  id: string;
+  round: number;
+  slot: number;
+  player1: PublicUser | null;
+  player2: PublicUser | null;
+  winner: PublicUser | null;
+  score1: number;
+  score2: number;
+}
+
+export type PongTournamentPhase = "registration" | "bracket" | "finished";
+
+export interface PongTournamentState {
+  phase: PongTournamentPhase;
+  roster: PublicUser[];
+  rounds: PongBracketMatch[][];
+  currentMatchId: string | null;
+  live: PongState | null;
+  champion: PublicUser | null;
+}
+
 // Normalized playfield: width 1, height 1, paddle height fraction, etc.
 export const PONG_PADDLE_HEIGHT = 0.22;
 export const PONG_PADDLE_SPEED = 1.6; // fraction of field height per second (client-predicted, server-authoritative)
@@ -77,6 +101,35 @@ export type ArenaStatus = "waiting" | "countdown" | "playing" | "finished";
 export const ARENA_PLAYER_RADIUS = 0.03;
 export const ARENA_MOVE_SPEED = 0.35; // field fraction per second
 export const ARENA_MIN_PLAYERS = 2;
+
+export interface ArenaRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+// Shared map layout for Wizard Battles and Shooters: walls block movement, sight, and
+// combat; bushes hide whoever's standing in them from anyone not also standing in that
+// same bush. Hide & Seek uses the open arena (no walls/bushes) — a seeker with an
+// obstructed view would need real raycasting-driven hide spots to feel fair, out of
+// scope for now.
+export const ARENA_WALLS: ArenaRect[] = [
+  { x: 0.15, y: 0.42, w: 0.2, h: 0.07 },
+  { x: 0.65, y: 0.42, w: 0.2, h: 0.07 },
+  { x: 0.42, y: 0.15, w: 0.07, h: 0.22 },
+  { x: 0.42, y: 0.63, w: 0.07, h: 0.22 },
+];
+
+// Flush with the arena edges (not inset) so a player clamped into the very corner —
+// which is a reachable resting position, since ARENA_PLAYER_RADIUS keeps their center
+// just off the true 0/1 boundary — still lands inside the bush zone.
+export const ARENA_BUSHES: ArenaRect[] = [
+  { x: 0, y: 0, w: 0.19, h: 0.19 },
+  { x: 0.81, y: 0, w: 0.19, h: 0.19 },
+  { x: 0, y: 0.81, w: 0.19, h: 0.19 },
+  { x: 0.81, y: 0.81, w: 0.19, h: 0.19 },
+];
 
 // -- Hide & Seek --
 
@@ -111,6 +164,7 @@ export interface WizardPlayer {
   y: number;
   hp: number;
   alive: boolean;
+  inBush: boolean;
 }
 
 export interface WizardBolt {
@@ -151,6 +205,7 @@ export interface ShooterPlayer {
   hp: number;
   kills: number;
   alive: boolean;
+  inBush: boolean;
 }
 
 export interface ShooterTracer {
@@ -182,12 +237,14 @@ export const SOCKET_EVENTS = {
   LOBBY_STATE: "lobby:state",
   ADMIN_START_EVENT: "admin:startEvent",
   ADMIN_END_EVENT: "admin:endEvent",
+  ADMIN_START_MATCH: "admin:startMatch",
   EVENT_STARTED: "event:started",
   EVENT_ENDED: "event:ended",
   GAME_JOIN: "game:join",
   GAME_LEAVE: "game:leave",
   PONG_INPUT: "pong:input",
   PONG_STATE: "pong:state",
+  PONG_TOURNAMENT_STATE: "pong:tournamentState",
   ARENA_INPUT: "arena:input",
   HIDE_SEEK_STATE: "hideSeek:state",
   WIZARD_STATE: "wizard:state",

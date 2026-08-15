@@ -8,6 +8,7 @@ interface GameContextValue {
   errorMessage: string | null;
   startEvent: (gameType: GameType) => void;
   endEvent: () => void;
+  startMatch: () => void;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -55,6 +56,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       errorMessage,
       startEvent: (gameType) => socket?.emit(SOCKET_EVENTS.ADMIN_START_EVENT, { gameType }),
       endEvent: () => socket?.emit(SOCKET_EVENTS.ADMIN_END_EVENT),
+      startMatch: () => socket?.emit(SOCKET_EVENTS.ADMIN_START_MATCH),
     }),
     [users, activeEvent, errorMessage, socket],
   );

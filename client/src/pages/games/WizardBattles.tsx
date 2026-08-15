@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { SOCKET_EVENTS, type WizardBattleState } from "@koroc/shared";
+import { ARENA_BUSHES, ARENA_WALLS, SOCKET_EVENTS, type WizardBattleState } from "@koroc/shared";
 import { useSocket } from "../../context/SocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
+import { PlayerRoster } from "../../components/PlayerRoster";
+import { StartMatchControl } from "../../components/StartMatchControl";
 
 const BG = "#0f1020";
+const WALL_COLOR = "#4a4d7a";
+const BUSH_COLOR = "rgba(92, 232, 122, 0.18)";
+const BUSH_BORDER = "rgba(92, 232, 122, 0.5)";
 const WIZARD_COLOR = "#b48bff";
 const BOLT_COLOR = "#ffd166";
 const YOU_RING = "#7ce0ff";
@@ -60,6 +65,18 @@ export function WizardBattles() {
       ctx.fillStyle = BG;
       ctx.fillRect(0, 0, width, height);
 
+      ctx.fillStyle = BUSH_COLOR;
+      ctx.strokeStyle = BUSH_BORDER;
+      for (const bush of ARENA_BUSHES) {
+        ctx.fillRect(bush.x * width, bush.y * height, bush.w * width, bush.h * height);
+        ctx.strokeRect(bush.x * width, bush.y * height, bush.w * width, bush.h * height);
+      }
+
+      ctx.fillStyle = WALL_COLOR;
+      for (const wall of ARENA_WALLS) {
+        ctx.fillRect(wall.x * width, wall.y * height, wall.w * width, wall.h * height);
+      }
+
       ctx.fillStyle = BOLT_COLOR;
       for (const bolt of state.bolts) {
         ctx.beginPath();
@@ -72,8 +89,9 @@ export function WizardBattles() {
         if (!player.alive) continue;
         const px = player.x * width;
         const py = player.y * height;
+        const isYou = player.id === user?.id;
 
-        if (player.id === user?.id) {
+        if (isYou) {
           ctx.strokeStyle = YOU_RING;
           ctx.lineWidth = 3;
           ctx.beginPath();
@@ -81,10 +99,12 @@ export function WizardBattles() {
           ctx.stroke();
         }
 
+        ctx.globalAlpha = isYou && player.inBush ? 0.45 : 1;
         ctx.fillStyle = WIZARD_COLOR;
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 1;
 
         const barW = r * 2.4;
         const barX = px - barW / 2;
@@ -118,9 +138,19 @@ export function WizardBattles() {
         <span>{me && !me.alive ? "Eliminated — spectating" : ""}</span>
       </div>
 
+      {status === "waiting" && displayState && (
+        <>
+          <PlayerRoster players={displayState.players} youId={user?.id} title="Wizards joining" />
+          <StartMatchControl
+            canStart={displayState.players.length >= 2}
+            notEnoughHint="Need at least 2 wizards to start"
+          />
+        </>
+      )}
+
       <div className="arena-canvas-container" ref={containerRef}>
         <canvas ref={canvasRef} className="arena-canvas" />
-        {status === "waiting" && <div className="pong-overlay">Waiting for at least 2 wizards…</div>}
+        {status === "waiting" && <div className="pong-overlay">Waiting for the host to start…</div>}
         {status === "countdown" && <div className="pong-overlay big">{displayState?.countdown}</div>}
         {status === "finished" && (
           <div className="pong-overlay">{displayState?.winner ? `${displayState.winner.username} wins!` : "Draw!"}</div>
@@ -129,7 +159,8 @@ export function WizardBattles() {
 
       <p className="pong-role">
         Drag on the arena or use WASD / Arrow keys to move. Your wizard auto-casts at the nearest
-        opponent — position yourself and dodge incoming bolts. Last wizard standing wins.
+        <strong> visible</strong> opponent — walls block line of sight, and the green bushes hide you
+        from anyone not standing in the same one. Last wizard standing wins.
       </p>
     </div>
   );

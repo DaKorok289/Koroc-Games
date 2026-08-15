@@ -1,3 +1,4 @@
+import type { Server } from "socket.io";
 import {
   ARENA_MIN_PLAYERS,
   ARENA_MOVE_SPEED,
@@ -11,6 +12,7 @@ import {
   type WizardBattleState,
   type WizardBolt,
 } from "@koroc/shared";
+import { bushAt, hasLineOfSight, isVisible, resolveWallCollision } from "./arenaPhysics";
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 1000 / 30;
@@ -28,7 +30,6 @@ interface InternalPlayer {
   lastCastAt: number;
 }
 
-type OnUpdate = (state: WizardBattleState) => void;
 type OnEnd = () => void;
 
 function randomSpawn(): { x: number; y: number } {
@@ -45,11 +46,13 @@ export class WizardBattleGame {
   private countdownHandle: ReturnType<typeof setInterval> | null = null;
   private loopHandle: ReturnType<typeof setInterval> | null = null;
   private lastTick = Date.now();
-  private readonly onUpdate: OnUpdate;
+  private readonly io: Server;
+  private readonly event: string;
   private readonly onEnd: OnEnd;
 
-  constructor(onUpdate: OnUpdate, onEnd: OnEnd) {
-    this.onUpdate = onUpdate;
+  constructor(io: Server, event: string, onEnd: OnEnd) {
+    this.io = io;
+    this.event = event;
     this.onEnd = onEnd;
   }
 
@@ -69,8 +72,7 @@ export class WizardBattleGame {
         lastCastAt: 0,
       });
     }
-    this.maybeStart();
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
   removeParticipant(socketId: string): void {
@@ -82,7 +84,7 @@ export class WizardBattleGame {
       this.winner = null;
       this.bolts = [];
     }
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
   handleInput(socketId: string, dx: number, dy: number): void {
@@ -93,20 +95,21 @@ export class WizardBattleGame {
     player.dy = len > 1 ? dy / len : dy;
   }
 
-  private maybeStart(): void {
-    if (this.status === "waiting" && this.players.size >= ARENA_MIN_PLAYERS) {
-      this.status = "countdown";
-      this.countdown = COUNTDOWN_SECONDS;
-      this.stopCountdown();
-      this.countdownHandle = setInterval(() => {
-        this.countdown -= 1;
-        if (this.countdown <= 0) {
-          this.stopCountdown();
-          this.beginRound();
-        }
-        this.onUpdate(this.getState());
-      }, 1000);
-    }
+  /** Admin-triggered: begins the countdown once enough players have joined. */
+  requestStart(): boolean {
+    if (this.status !== "waiting" || this.players.size < ARENA_MIN_PLAYERS) return false;
+    this.status = "countdown";
+    this.countdown = COUNTDOWN_SECONDS;
+    this.stopCountdown();
+    this.countdownHandle = setInterval(() => {
+      this.countdown -= 1;
+      if (this.countdown <= 0) {
+        this.stopCountdown();
+        this.beginRound();
+      }
+      this.broadcast();
+    }, 1000);
+    return true;
   }
 
   private beginRound(): void {
@@ -154,10 +157,14 @@ export class WizardBattleGame {
 
     for (const player of this.players.values()) {
       if (!player.alive) continue;
-      player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, player.x + player.dx * ARENA_MOVE_SPEED * dt));
-      player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, player.y + player.dy * ARENA_MOVE_SPEED * dt));
+      const targetX = player.x + player.dx * ARENA_MOVE_SPEED * dt;
+      const targetY = player.y + player.dy * ARENA_MOVE_SPEED * dt;
+      const resolved = resolveWallCollision(player.x, player.y, targetX, targetY, ARENA_PLAYER_RADIUS);
+      player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.x));
+      player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.y));
     }
 
+    // Auto-cast at the nearest *visible* opponent (walls/bushes make you a non-target).
     const alivePlayers = Array.from(this.players.values()).filter((p) => p.alive);
     for (const player of alivePlayers) {
       if (now - player.lastCastAt < WIZARD_CAST_COOLDOWN_MS) continue;
@@ -165,6 +172,7 @@ export class WizardBattleGame {
       let nearestDist = Infinity;
       for (const other of alivePlayers) {
         if (other === player) continue;
+        if (!isVisible(player, other)) continue;
         const dist = Math.hypot(other.x - player.x, other.y - player.y);
         if (dist < nearestDist) {
           nearestDist = dist;
@@ -190,9 +198,12 @@ export class WizardBattleGame {
 
     const survivingBolts: WizardBolt[] = [];
     for (const bolt of this.bolts) {
+      const prevX = bolt.x;
+      const prevY = bolt.y;
       bolt.x += bolt.vx * dt;
       bolt.y += bolt.vy * dt;
       if (bolt.x < 0 || bolt.x > 1 || bolt.y < 0 || bolt.y > 1) continue;
+      if (!hasLineOfSight(prevX, prevY, bolt.x, bolt.y)) continue; // blocked by a wall
 
       let hit = false;
       for (const player of this.players.values()) {
@@ -217,29 +228,40 @@ export class WizardBattleGame {
       this.status = "finished";
       this.winner = survivors.length === 1 ? { id: survivors[0].id, username: survivors[0].username } : null;
       this.stopLoop();
-      this.onUpdate(this.getState());
+      this.broadcast();
       setTimeout(() => this.onEnd(), 5000);
       return;
     }
 
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
-  getState(): WizardBattleState {
+  private getStateFor(viewerId: number): WizardBattleState {
+    const viewer = Array.from(this.players.values()).find((p) => p.id === viewerId);
     return {
       status: this.status,
       countdown: this.countdown,
-      players: Array.from(this.players.values()).map((p) => ({
-        id: p.id,
-        username: p.username,
-        x: p.x,
-        y: p.y,
-        hp: p.hp,
-        alive: p.alive,
-      })),
+      players: Array.from(this.players.values())
+        .filter((p) => !viewer || isVisible(viewer, p))
+        .map((p) => ({
+          id: p.id,
+          username: p.username,
+          x: p.x,
+          y: p.y,
+          hp: p.hp,
+          alive: p.alive,
+          inBush: !!bushAt(p.x, p.y),
+        })),
       bolts: this.bolts,
       winner: this.winner,
     };
+  }
+
+  /** Emits each participant their own personalized (visibility-filtered) view. */
+  private broadcast(): void {
+    for (const player of this.players.values()) {
+      this.io.to(player.socketId).emit(this.event, this.getStateFor(player.id));
+    }
   }
 
   destroy(): void {

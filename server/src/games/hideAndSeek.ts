@@ -63,7 +63,6 @@ export class HideAndSeekGame {
         dy: 0,
       });
     }
-    this.maybeStart();
     this.onUpdate(this.getState());
   }
 
@@ -86,20 +85,21 @@ export class HideAndSeekGame {
     player.dy = len > 1 ? dy / len : dy;
   }
 
-  private maybeStart(): void {
-    if (this.status === "waiting" && this.players.size >= ARENA_MIN_PLAYERS) {
-      this.status = "countdown";
-      this.countdown = COUNTDOWN_SECONDS;
-      this.stopCountdown();
-      this.countdownHandle = setInterval(() => {
-        this.countdown -= 1;
-        if (this.countdown <= 0) {
-          this.stopCountdown();
-          this.beginRound();
-        }
-        this.onUpdate(this.getState());
-      }, 1000);
-    }
+  /** Admin-triggered: begins the countdown once enough players have joined. */
+  requestStart(): boolean {
+    if (this.status !== "waiting" || this.players.size < ARENA_MIN_PLAYERS) return false;
+    this.status = "countdown";
+    this.countdown = COUNTDOWN_SECONDS;
+    this.stopCountdown();
+    this.countdownHandle = setInterval(() => {
+      this.countdown -= 1;
+      if (this.countdown <= 0) {
+        this.stopCountdown();
+        this.beginRound();
+      }
+      this.onUpdate(this.getState());
+    }, 1000);
+    return true;
   }
 
   private beginRound(): void {

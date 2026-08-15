@@ -4,6 +4,8 @@ import { useSocket } from "../../context/SocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { useResizableCanvas } from "../../hooks/useResizableCanvas";
 import { useArenaMovement } from "../../hooks/useArenaMovement";
+import { PlayerRoster } from "../../components/PlayerRoster";
+import { StartMatchControl } from "../../components/StartMatchControl";
 
 const BG = "#0f1020";
 const SEEKER_COLOR = "#ff6b6b";
@@ -101,9 +103,19 @@ export function HideAndSeek() {
         <span>{me ? (me.isSeeker ? "You're the seeker!" : me.tagged ? "Tagged!" : "You're hiding!") : ""}</span>
       </div>
 
+      {status === "waiting" && displayState && (
+        <>
+          <PlayerRoster players={displayState.players} youId={user?.id} title="Players joining" />
+          <StartMatchControl
+            canStart={displayState.players.length >= 2}
+            notEnoughHint="Need at least 2 players to start"
+          />
+        </>
+      )}
+
       <div className="arena-canvas-container" ref={containerRef}>
         <canvas ref={canvasRef} className="arena-canvas" />
-        {status === "waiting" && <div className="pong-overlay">Waiting for at least 2 players…</div>}
+        {status === "waiting" && <div className="pong-overlay">Waiting for the host to start…</div>}
         {status === "countdown" && <div className="pong-overlay big">{displayState?.countdown}</div>}
         {status === "finished" && (
           <div className="pong-overlay">{displayState?.winner === "seeker" ? "Seeker wins!" : "Hiders win!"}</div>

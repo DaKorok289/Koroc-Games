@@ -9,7 +9,7 @@ import {
   type PublicUser,
 } from "@koroc/shared";
 import { AUTH_COOKIE, parseUserFromToken } from "./auth";
-import { PongGame } from "./games/pong";
+import { PongTournament } from "./games/pongTournament";
 import { HideAndSeekGame } from "./games/hideAndSeek";
 import { WizardBattleGame } from "./games/wizardBattles";
 import { ShooterGame } from "./games/shooters";
@@ -20,7 +20,7 @@ interface AuthedSocket extends Socket {
 
 const connectedUsers = new Map<string, PublicUser>();
 let activeEvent: ActiveEvent | null = null;
-let pongGame: PongGame | null = null;
+let pongTournament: PongTournament | null = null;
 let hideAndSeekGame: HideAndSeekGame | null = null;
 let wizardBattleGame: WizardBattleGame | null = null;
 let shooterGame: ShooterGame | null = null;
@@ -56,10 +56,11 @@ export function registerRealtime(io: Server): void {
     io.emit(SOCKET_EVENTS.LOBBY_STATE, lobbyState());
     if (activeEvent) {
       socket.emit(SOCKET_EVENTS.EVENT_STARTED, activeEvent);
-      if (pongGame) socket.emit(SOCKET_EVENTS.PONG_STATE, pongGame.getState());
+      if (pongTournament) socket.emit(SOCKET_EVENTS.PONG_TOURNAMENT_STATE, pongTournament.getState());
       if (hideAndSeekGame) socket.emit(SOCKET_EVENTS.HIDE_SEEK_STATE, hideAndSeekGame.getState());
-      if (wizardBattleGame) socket.emit(SOCKET_EVENTS.WIZARD_STATE, wizardBattleGame.getState());
-      if (shooterGame) socket.emit(SOCKET_EVENTS.SHOOTER_STATE, shooterGame.getState());
+      // Wizard Battles / Shooters state is personalized per viewer (visibility rules), so
+      // it isn't pushed here — the game component's own GAME_JOIN on mount triggers a
+      // fresh, correctly-filtered broadcast for this socket.
     }
 
     socket.on(SOCKET_EVENTS.ADMIN_START_EVENT, (payload: { gameType: GameType }) => {
@@ -81,8 +82,8 @@ export function registerRealtime(io: Server): void {
 
       switch (payload.gameType) {
         case "ping-pong":
-          pongGame = new PongGame(
-            (state) => io.emit(SOCKET_EVENTS.PONG_STATE, state),
+          pongTournament = new PongTournament(
+            (state) => io.emit(SOCKET_EVENTS.PONG_TOURNAMENT_STATE, state),
             () => endActiveEvent(io),
           );
           break;
@@ -93,16 +94,10 @@ export function registerRealtime(io: Server): void {
           );
           break;
         case "wizard-battles":
-          wizardBattleGame = new WizardBattleGame(
-            (state) => io.emit(SOCKET_EVENTS.WIZARD_STATE, state),
-            () => endActiveEvent(io),
-          );
+          wizardBattleGame = new WizardBattleGame(io, SOCKET_EVENTS.WIZARD_STATE, () => endActiveEvent(io));
           break;
         case "shooters":
-          shooterGame = new ShooterGame(
-            (state) => io.emit(SOCKET_EVENTS.SHOOTER_STATE, state),
-            () => endActiveEvent(io),
-          );
+          shooterGame = new ShooterGame(io, SOCKET_EVENTS.SHOOTER_STATE, () => endActiveEvent(io));
           break;
       }
 
@@ -118,10 +113,27 @@ export function registerRealtime(io: Server): void {
       endActiveEvent(io);
     });
 
+    // Only the specific admin who created this event can start it — everyone else
+    // just waits, so the creator controls timing (e.g. waiting for more sign-ups).
+    socket.on(SOCKET_EVENTS.ADMIN_START_MATCH, () => {
+      if (!activeEvent || activeEvent.startedBy !== user.username) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Only the event's creator can start it" });
+        return;
+      }
+      let ok = false;
+      if (activeEvent.gameType === "ping-pong") ok = pongTournament?.requestStart() ?? false;
+      else if (activeEvent.gameType === "hide-and-seek") ok = hideAndSeekGame?.requestStart() ?? false;
+      else if (activeEvent.gameType === "wizard-battles") ok = wizardBattleGame?.requestStart() ?? false;
+      else if (activeEvent.gameType === "shooters") ok = shooterGame?.requestStart() ?? false;
+      if (!ok) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Need at least 2 players joined to start" });
+      }
+    });
+
     socket.on(SOCKET_EVENTS.GAME_JOIN, (_payload: unknown, ack?: (res: { role: string }) => void) => {
-      if (activeEvent?.gameType === "ping-pong" && pongGame) {
-        const role = pongGame.addParticipant(user, socket.id);
-        ack?.({ role });
+      if (activeEvent?.gameType === "ping-pong" && pongTournament) {
+        pongTournament.addParticipant(user, socket.id);
+        ack?.({ role: "player" });
       } else if (activeEvent?.gameType === "hide-and-seek" && hideAndSeekGame) {
         hideAndSeekGame.addParticipant(user, socket.id);
         ack?.({ role: "player" });
@@ -137,7 +149,7 @@ export function registerRealtime(io: Server): void {
     });
 
     socket.on(SOCKET_EVENTS.GAME_LEAVE, () => {
-      pongGame?.removeParticipant(socket.id);
+      pongTournament?.removeParticipant(socket.id);
       hideAndSeekGame?.removeParticipant(socket.id);
       wizardBattleGame?.removeParticipant(socket.id);
       shooterGame?.removeParticipant(socket.id);
@@ -145,7 +157,7 @@ export function registerRealtime(io: Server): void {
 
     socket.on(SOCKET_EVENTS.PONG_INPUT, (payload: { paddleY: number }) => {
       if (typeof payload?.paddleY === "number") {
-        pongGame?.handleInput(socket.id, payload.paddleY);
+        pongTournament?.handleInput(socket.id, payload.paddleY);
       }
     });
 
@@ -158,7 +170,7 @@ export function registerRealtime(io: Server): void {
 
     socket.on("disconnect", () => {
       connectedUsers.delete(socket.id);
-      pongGame?.removeParticipant(socket.id);
+      pongTournament?.removeParticipant(socket.id);
       hideAndSeekGame?.removeParticipant(socket.id);
       wizardBattleGame?.removeParticipant(socket.id);
       shooterGame?.removeParticipant(socket.id);
@@ -169,8 +181,8 @@ export function registerRealtime(io: Server): void {
 
 function endActiveEvent(io: Server): void {
   if (!activeEvent) return;
-  pongGame?.destroy();
-  pongGame = null;
+  pongTournament?.destroy();
+  pongTournament = null;
   hideAndSeekGame?.destroy();
   hideAndSeekGame = null;
   wizardBattleGame?.destroy();

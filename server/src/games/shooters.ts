@@ -1,3 +1,4 @@
+import type { Server } from "socket.io";
 import {
   ARENA_MIN_PLAYERS,
   ARENA_MOVE_SPEED,
@@ -12,6 +13,7 @@ import {
   type ShooterState,
   type ShooterTracer,
 } from "@koroc/shared";
+import { bushAt, isVisible, resolveWallCollision } from "./arenaPhysics";
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 1000 / 30;
@@ -31,7 +33,6 @@ interface InternalPlayer {
   respawnAt: number;
 }
 
-type OnUpdate = (state: ShooterState) => void;
 type OnEnd = () => void;
 
 function randomSpawn(): { x: number; y: number } {
@@ -47,11 +48,13 @@ export class ShooterGame {
   private countdownHandle: ReturnType<typeof setInterval> | null = null;
   private loopHandle: ReturnType<typeof setInterval> | null = null;
   private lastTick = Date.now();
-  private readonly onUpdate: OnUpdate;
+  private readonly io: Server;
+  private readonly event: string;
   private readonly onEnd: OnEnd;
 
-  constructor(onUpdate: OnUpdate, onEnd: OnEnd) {
-    this.onUpdate = onUpdate;
+  constructor(io: Server, event: string, onEnd: OnEnd) {
+    this.io = io;
+    this.event = event;
     this.onEnd = onEnd;
   }
 
@@ -73,8 +76,7 @@ export class ShooterGame {
         respawnAt: 0,
       });
     }
-    this.maybeStart();
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
   removeParticipant(socketId: string): void {
@@ -86,7 +88,7 @@ export class ShooterGame {
       this.winner = null;
       this.tracers = [];
     }
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
   handleInput(socketId: string, dx: number, dy: number): void {
@@ -97,20 +99,21 @@ export class ShooterGame {
     player.dy = len > 1 ? dy / len : dy;
   }
 
-  private maybeStart(): void {
-    if (this.status === "waiting" && this.players.size >= ARENA_MIN_PLAYERS) {
-      this.status = "countdown";
-      this.countdown = COUNTDOWN_SECONDS;
-      this.stopCountdown();
-      this.countdownHandle = setInterval(() => {
-        this.countdown -= 1;
-        if (this.countdown <= 0) {
-          this.stopCountdown();
-          this.beginRound();
-        }
-        this.onUpdate(this.getState());
-      }, 1000);
-    }
+  /** Admin-triggered: begins the countdown once enough players have joined. */
+  requestStart(): boolean {
+    if (this.status !== "waiting" || this.players.size < ARENA_MIN_PLAYERS) return false;
+    this.status = "countdown";
+    this.countdown = COUNTDOWN_SECONDS;
+    this.stopCountdown();
+    this.countdownHandle = setInterval(() => {
+      this.countdown -= 1;
+      if (this.countdown <= 0) {
+        this.stopCountdown();
+        this.beginRound();
+      }
+      this.broadcast();
+    }, 1000);
+    return true;
   }
 
   private beginRound(): void {
@@ -158,7 +161,6 @@ export class ShooterGame {
     this.lastTick = now;
     if (this.status !== "playing") return;
 
-    // Respawns
     for (const player of this.players.values()) {
       if (!player.alive && now >= player.respawnAt) {
         const spawn = randomSpawn();
@@ -171,14 +173,17 @@ export class ShooterGame {
       }
     }
 
-    // Move
     for (const player of this.players.values()) {
       if (!player.alive) continue;
-      player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, player.x + player.dx * ARENA_MOVE_SPEED * dt));
-      player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, player.y + player.dy * ARENA_MOVE_SPEED * dt));
+      const targetX = player.x + player.dx * ARENA_MOVE_SPEED * dt;
+      const targetY = player.y + player.dy * ARENA_MOVE_SPEED * dt;
+      const resolved = resolveWallCollision(player.x, player.y, targetX, targetY, ARENA_PLAYER_RADIUS);
+      player.x = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.x));
+      player.y = Math.min(1 - ARENA_PLAYER_RADIUS, Math.max(ARENA_PLAYER_RADIUS, resolved.y));
     }
 
-    // Hitscan auto-fire at nearest alive opponent in range
+    // Hitscan auto-fire at the nearest *visible* opponent in range — targeting already
+    // requires line of sight, so a resolved shot is guaranteed unobstructed.
     this.tracers = [];
     const alivePlayers = Array.from(this.players.values()).filter((p) => p.alive);
     let winningShooter: InternalPlayer | null = null;
@@ -188,6 +193,7 @@ export class ShooterGame {
       let nearestDist = Infinity;
       for (const other of alivePlayers) {
         if (other === player) continue;
+        if (!isVisible(player, other)) continue;
         const dist = Math.hypot(other.x - player.x, other.y - player.y);
         if (dist < nearestDist) {
           nearestDist = dist;
@@ -214,31 +220,42 @@ export class ShooterGame {
       this.status = "finished";
       this.winner = { id: winningShooter.id, username: winningShooter.username };
       this.stopLoop();
-      this.onUpdate(this.getState());
+      this.broadcast();
       setTimeout(() => this.onEnd(), 5000);
       return;
     }
 
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
-  getState(): ShooterState {
+  private getStateFor(viewerId: number): ShooterState {
+    const viewer = Array.from(this.players.values()).find((p) => p.id === viewerId);
     return {
       status: this.status,
       countdown: this.countdown,
-      players: Array.from(this.players.values()).map((p) => ({
-        id: p.id,
-        username: p.username,
-        x: p.x,
-        y: p.y,
-        hp: p.hp,
-        kills: p.kills,
-        alive: p.alive,
-      })),
+      players: Array.from(this.players.values())
+        .filter((p) => !viewer || isVisible(viewer, p))
+        .map((p) => ({
+          id: p.id,
+          username: p.username,
+          x: p.x,
+          y: p.y,
+          hp: p.hp,
+          kills: p.kills,
+          alive: p.alive,
+          inBush: !!bushAt(p.x, p.y),
+        })),
       tracers: this.tracers,
       winner: this.winner,
       killTarget: SHOOTER_KILL_TARGET,
     };
+  }
+
+  /** Emits each participant their own personalized (visibility-filtered) view. */
+  private broadcast(): void {
+    for (const player of this.players.values()) {
+      this.io.to(player.socketId).emit(this.event, this.getStateFor(player.id));
+    }
   }
 
   destroy(): void {

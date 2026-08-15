@@ -180,6 +180,71 @@ input:focus {
   font-size: 0.9rem;
 }
 
+.icon-btn {
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roster-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+
+.roster-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.roster-list li {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.roster-list li.you {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.start-match-control {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.start-match-hint {
+  text-align: center;
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.85rem;
@@ -376,16 +441,15 @@ input:focus {
   border-radius: 12px;
   overflow: hidden;
   touch-action: none;
-  width: 100%;
-  aspect-ratio: 5 / 3;
-  max-height: 100%;
-  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pong-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
   touch-action: none;
 }
 
@@ -437,17 +501,76 @@ input:focus {
   border-radius: 12px;
   overflow: hidden;
   touch-action: none;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  max-height: 100%;
-  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .arena-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
   touch-action: none;
+}
+
+/* Ping Pong bracket */
+
+.bracket-tree {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 0.6rem;
+  min-width: 140px;
+}
+
+.bracket-round h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.bracket-match {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.bracket-match.current {
+  border-color: var(--accent-2);
+}
+
+.bracket-match.you {
+  border-color: var(--accent);
+}
+
+.bracket-match .won {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.pong-overlay-standalone {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  padding: 1rem;
 }
 
 /* Responsive */
