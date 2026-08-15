@@ -228,6 +228,10 @@ export interface HideSeekState {
   timeRemaining: number;
   roundSeconds: number;
   players: HideSeekPlayer[];
+  // Whoever's currently seeking — always known by identity, even in maze mode where
+  // their position may be hidden from a given viewer by walls (unlike `players`, which
+  // is visibility-filtered there). Lets the "X is seeking" banner stay accurate.
+  seeker: ArenaWinner | null;
   loser: ArenaWinner | null;
 }
 

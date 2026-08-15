@@ -22,7 +22,8 @@ services:
         sync: false
       - key: DATABASE_AUTH_TOKEN
         sync: false
-      # Comma-separated usernames to grant every shop cosmetic to for free, re-applied
-      # on every startup. Set in the Render dashboard, e.g. value "DaKorok".
+      # Admins already get every shop cosmetic for free automatically (no config
+      # needed). This is only for granting it to specific *non-admin* accounts too —
+      # comma-separated usernames, re-applied on every startup. Usually leave unset.
       - key: GRANT_ALL_COSMETICS_USERNAMES
         sync: false

@@ -70,24 +70,32 @@ function segmentIntersectsRect(ax: number, ay: number, bx: number, by: number, r
   );
 }
 
-export function hasLineOfSight(ax: number, ay: number, bx: number, by: number): boolean {
-  return !ARENA_WALLS.some((wall) => segmentIntersectsRect(ax, ay, bx, by, wall));
+export function hasLineOfSight(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  walls: ArenaRect[] = ARENA_WALLS,
+): boolean {
+  return !walls.some((wall) => segmentIntersectsRect(ax, ay, bx, by, wall));
 }
 
-export function bushAt(x: number, y: number): ArenaRect | null {
-  return ARENA_BUSHES.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) ?? null;
+export function bushAt(x: number, y: number, bushes: ArenaRect[] = ARENA_BUSHES): ArenaRect | null {
+  return bushes.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) ?? null;
 }
 
 /** Can the viewer currently see the target? Always true for yourself. */
 export function isVisible(
   viewer: { id: number; x: number; y: number },
   target: { id: number; x: number; y: number },
+  walls: ArenaRect[] = ARENA_WALLS,
+  bushes: ArenaRect[] = ARENA_BUSHES,
 ): boolean {
   if (viewer.id === target.id) return true;
-  if (!hasLineOfSight(viewer.x, viewer.y, target.x, target.y)) return false;
-  const targetBush = bushAt(target.x, target.y);
+  if (!hasLineOfSight(viewer.x, viewer.y, target.x, target.y, walls)) return false;
+  const targetBush = bushAt(target.x, target.y, bushes);
   if (targetBush) {
-    const viewerBush = bushAt(viewer.x, viewer.y);
+    const viewerBush = bushAt(viewer.x, viewer.y, bushes);
     if (viewerBush !== targetBush) return false;
   }
   return true;

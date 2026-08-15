@@ -10,7 +10,7 @@ import {
   verifyPassword,
   type AuthedRequest,
 } from "../auth";
-import { createUser, findUserByUsername, getUserCount } from "../db";
+import { createUser, findUserByUsername, getUserCount, grantAllCosmeticsToAdmins } from "../db";
 
 export const authRouter = Router();
 
@@ -41,6 +41,7 @@ authRouter.post("/register", async (req, res) => {
   const salt = generateSalt();
   const passwordHash = hashPassword(password, salt);
   const user = await createUser(username, passwordHash, salt, isFirstUser);
+  if (isFirstUser) await grantAllCosmeticsToAdmins();
 
   const token = signToken(user.id);
   res.cookie(AUTH_COOKIE, token, COOKIE_OPTIONS);

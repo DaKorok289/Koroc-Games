@@ -148,10 +148,7 @@ export function registerRealtime(io: Server): void {
           game = new FourCornersGame((state) => io.to(room(id)).emit(SOCKET_EVENTS.FOUR_CORNERS_STATE, state), onEnd);
           break;
         case "hide-and-seek-maze":
-          game = new MazeHideAndSeekGame(
-            (state) => io.to(room(id)).emit(SOCKET_EVENTS.MAZE_HIDE_SEEK_STATE, state),
-            onEnd,
-          );
+          game = new MazeHideAndSeekGame(io, SOCKET_EVENTS.MAZE_HIDE_SEEK_STATE, onEnd);
           break;
       }
 

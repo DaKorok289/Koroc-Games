@@ -116,7 +116,7 @@ export function HideAndSeekMaze({ eventId }: { eventId: string }) {
 
   const status = displayState?.status ?? "waiting";
   const me = displayState?.players.find((p) => p.id === user?.id);
-  const itPlayer = displayState?.players.find((p) => p.isIt);
+  const itPlayer = displayState?.seeker;
 
   return (
     <div className="arena-wrap">

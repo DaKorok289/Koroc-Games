@@ -100,9 +100,15 @@ config is needed for LAN play.
 - **Hide & Seek (maze)**: mechanically the same tag-transfer rule as Tag (touch the seeker's
   target radius to pass it on, with brief immunity so it can't bounce straight back) but on
   `HIDE_SEEK_MAZE_WALLS` — a much denser layout (`MazeHideAndSeekGame` in
-  `server/src/games/mazeHideAndSeek.ts`) — and with one addition: whoever becomes the new
-  seeker is teleported to the exact center of the maze, so every handoff means re-hunting from
-  scratch instead of continuing from wherever the tag happened.
+  `server/src/games/mazeHideAndSeek.ts`) — and with two differences from Tag: whoever becomes
+  the new seeker is teleported to the exact center of the maze (every handoff means re-hunting
+  from scratch instead of continuing from wherever the tag happened), and walls actually block
+  sight here — unlike Tag, each participant gets their own personalized, visibility-filtered
+  view (the same per-socket-emit mechanism Wizard Battles/Shooters use), so you genuinely can't
+  see a hider — or the seeker — through a wall. The current seeker's *identity* is still always
+  known to everyone (real hide & seek: you know who's it, just not where they are) via a
+  separate `seeker` field on `HideSeekState` that isn't visibility-filtered, even though their
+  position in the `players` array is.
 - **Combat (Wizard Battles / Shooters)**: aim is directional, not automatic. On touch it
   follows your movement drag; on desktop it independently follows your mouse cursor
   (`useMouseAim`, a separate `arena:aim` event from movement) while WASD still drives
@@ -145,9 +151,13 @@ config is needed for LAN play.
 - **Granting admin on a deployed instance**: set an `ADMIN_USERNAMES` env var (comma-separated
   usernames) on the host. Promotion runs on every server startup, so it takes effect on the
   next deploy/restart — no direct database access needed.
-- **Granting free shop cosmetics on a deployed instance**: same pattern — set
-  `GRANT_ALL_COSMETICS_USERNAMES` (comma-separated usernames) and every listed account gets
-  every `SHOP_COLORS` item for free, re-applied (idempotently) on every startup.
+- **Admins and the shop**: every admin account automatically owns every `SHOP_COLORS` item for
+  free — no purchase needed. This is enforced by `grantAllCosmeticsToAdmins()` in
+  `server/src/db.ts`, which runs on every server startup and immediately after any account
+  becomes an admin (including the very first registered user, who's auto-promoted), so it
+  doesn't need a restart to take effect. `GRANT_ALL_COSMETICS_USERNAMES` (comma-separated
+  usernames) is a separate, optional env var for granting the same thing to specific
+  non-admin accounts.
 - **Database persistence**: `server/src/db.ts` uses `@libsql/client`, a SQLite-compatible
   driver that works two ways. With no config it opens a local file (`file:...`, same format as
   plain SQLite) — this is what local dev and the always-on launchd service use, no setup

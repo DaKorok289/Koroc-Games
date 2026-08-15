@@ -188,6 +188,7 @@ export class HideAndSeekGame {
   }
 
   getState(): HideSeekState {
+    const it = Array.from(this.players.values()).find((p) => p.isIt);
     return {
       status: this.status,
       countdown: this.countdown,
@@ -201,6 +202,7 @@ export class HideAndSeekGame {
         y: p.y,
         isIt: p.isIt,
       })),
+      seeker: it ? { id: it.id, username: it.username } : null,
       loser: this.loser,
     };
   }

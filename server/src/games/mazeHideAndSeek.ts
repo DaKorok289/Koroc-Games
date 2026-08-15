@@ -1,3 +1,4 @@
+import type { Server } from "socket.io";
 import {
   ARENA_MIN_PLAYERS,
   ARENA_MOVE_SPEED,
@@ -11,10 +12,11 @@ import {
   type HideSeekState,
   type PublicUser,
 } from "@koroc/shared";
-import { randomSpawn, resolveWallCollision } from "./arenaPhysics";
+import { isVisible, randomSpawn, resolveWallCollision } from "./arenaPhysics";
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 1000 / 30;
+const NO_BUSHES: never[] = []; // maze mode has no bush-hiding, only wall-blocked sight
 
 interface InternalPlayer {
   socketId: string;
@@ -29,12 +31,14 @@ interface InternalPlayer {
   dy: number;
 }
 
-type OnUpdate = (state: HideSeekState) => void;
 type OnEnd = () => void;
 
-/** Same tag-transfer rules as Tag (HideAndSeekGame), but on a much denser maze layout
- * and with one extra rule: whoever becomes the new seeker is teleported to the center
- * of the map, so they have to re-navigate the maze from scratch every time it happens. */
+/** Same tag-transfer rules as Tag (HideAndSeekGame), but on a much denser maze layout,
+ * with two extras: whoever becomes the new seeker is teleported to the center of the
+ * map (so every handoff means re-navigating from scratch), and — unlike Tag — walls
+ * actually block sight here: each participant gets their own personalized, visibility-
+ * filtered view (same mechanism as Wizard Battles/Shooters) instead of a single shared
+ * broadcast, so you genuinely can't see a hider (or the seeker) through a wall. */
 export class MazeHideAndSeekGame {
   private players = new Map<string, InternalPlayer>();
   private status: HideSeekState["status"] = "waiting";
@@ -44,11 +48,13 @@ export class MazeHideAndSeekGame {
   private countdownHandle: ReturnType<typeof setInterval> | null = null;
   private loopHandle: ReturnType<typeof setInterval> | null = null;
   private lastTick = Date.now();
-  private readonly onUpdate: OnUpdate;
+  private readonly io: Server;
+  private readonly event: string;
   private readonly onEnd: OnEnd;
 
-  constructor(onUpdate: OnUpdate, onEnd: OnEnd) {
-    this.onUpdate = onUpdate;
+  constructor(io: Server, event: string, onEnd: OnEnd) {
+    this.io = io;
+    this.event = event;
     this.onEnd = onEnd;
   }
 
@@ -68,7 +74,7 @@ export class MazeHideAndSeekGame {
         dy: 0,
       });
     }
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
   removeParticipant(socketId: string): void {
@@ -79,7 +85,7 @@ export class MazeHideAndSeekGame {
       this.status = "waiting";
       this.loser = null;
     }
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
   handleInput(socketId: string, dx: number, dy: number): void {
@@ -102,7 +108,7 @@ export class MazeHideAndSeekGame {
         this.stopCountdown();
         this.beginRound();
       }
-      this.onUpdate(this.getState());
+      this.broadcast();
     }, 1000);
     return true;
   }
@@ -191,30 +197,47 @@ export class MazeHideAndSeekGame {
       const stillIt = Array.from(this.players.values()).find((p) => p.isIt);
       this.loser = stillIt ? { id: stillIt.id, username: stillIt.username } : null;
       this.stopLoop();
-      this.onUpdate(this.getState());
+      this.broadcast();
       setTimeout(() => this.onEnd(), 5000);
       return;
     }
 
-    this.onUpdate(this.getState());
+    this.broadcast();
   }
 
-  getState(): HideSeekState {
+  private getStateFor(viewerId: number): HideSeekState {
+    const viewer = Array.from(this.players.values()).find((p) => p.id === viewerId);
+    const it = Array.from(this.players.values()).find((p) => p.isIt);
     return {
       status: this.status,
       countdown: this.countdown,
       timeRemaining: Math.ceil(this.timeRemaining),
       roundSeconds: HIDE_SEEK_ROUND_SECONDS,
-      players: Array.from(this.players.values()).map((p) => ({
-        id: p.id,
-        username: p.username,
-        color: p.color,
-        x: p.x,
-        y: p.y,
-        isIt: p.isIt,
-      })),
+      // Visibility (walls block sight) only applies once the round is actually playing —
+      // the pre-game roster and post-game results always show everyone. No bushes in
+      // this mode, so it's purely wall-blocked line of sight.
+      players: Array.from(this.players.values())
+        .filter((p) => this.status !== "playing" || !viewer || isVisible(viewer, p, HIDE_SEEK_MAZE_WALLS, NO_BUSHES))
+        .map((p) => ({
+          id: p.id,
+          username: p.username,
+          color: p.color,
+          x: p.x,
+          y: p.y,
+          isIt: p.isIt,
+        })),
+      // Always known by identity (even if their position is currently hidden) — you know
+      // who's seeking in real hide & seek, you just don't always know where they are.
+      seeker: it ? { id: it.id, username: it.username } : null,
       loser: this.loser,
     };
+  }
+
+  /** Emits each participant their own personalized (visibility-filtered) view. */
+  private broadcast(): void {
+    for (const player of this.players.values()) {
+      this.io.to(player.socketId).emit(this.event, this.getStateFor(player.id));
+    }
   }
 
   getPlayerCount(): number {

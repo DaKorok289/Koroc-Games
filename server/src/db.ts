@@ -189,6 +189,20 @@ export async function promoteAdminsFromEnv(): Promise<void> {
   }
 }
 
+async function grantAllCosmeticsToUser(userId: number, username: string): Promise<void> {
+  let grantedAny = false;
+  for (const item of SHOP_COLORS) {
+    const result = await db.execute({
+      sql: "INSERT OR IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)",
+      args: [userId, item.id],
+    });
+    if (result.rowsAffected > 0) grantedAny = true;
+  }
+  if (grantedAny) {
+    console.log(`Granted all shop cosmetics to "${username}"`);
+  }
+}
+
 // Grants every SHOP_COLORS cosmetic (for free, no coin deduction) to usernames listed in
 // GRANT_ALL_COSMETICS_USERNAMES (comma-separated). Same env-var-driven pattern as
 // promoteAdminsFromEnv — runs on every startup, idempotent, no-op for names that haven't
@@ -203,16 +217,16 @@ export async function grantAllCosmeticsFromEnv(): Promise<void> {
   for (const username of usernames) {
     const user = await findUserByUsername(username);
     if (!user) continue;
-    let grantedAny = false;
-    for (const item of SHOP_COLORS) {
-      const result = await db.execute({
-        sql: "INSERT OR IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)",
-        args: [user.id, item.id],
-      });
-      if (result.rowsAffected > 0) grantedAny = true;
-    }
-    if (grantedAny) {
-      console.log(`Granted all shop cosmetics to "${username}" via GRANT_ALL_COSMETICS_USERNAMES`);
-    }
+    await grantAllCosmeticsToUser(user.id, user.username);
+  }
+}
+
+// Admins get every shop cosmetic for free, automatically — re-applied on every startup
+// (and right after a new admin is created) so it stays true as new admins are promoted,
+// without needing a per-username env var.
+export async function grantAllCosmeticsToAdmins(): Promise<void> {
+  const result = await db.execute("SELECT id, username FROM users WHERE is_admin = 1");
+  for (const row of result.rows) {
+    await grantAllCosmeticsToUser(Number(row.id), String(row.username));
   }
 }
