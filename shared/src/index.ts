@@ -42,6 +42,7 @@ export interface ActiveEvent {
   id: string;
   gameType: GameType;
   startedBy: string;
+  playerCount: number;
 }
 
 // ---- Pong ----

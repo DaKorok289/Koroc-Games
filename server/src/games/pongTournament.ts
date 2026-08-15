@@ -216,6 +216,10 @@ export class PongTournament {
     };
   }
 
+  getPlayerCount(): number {
+    return this.roster.size;
+  }
+
   destroy(): void {
     this.currentMatch?.destroy();
     this.currentMatch = null;

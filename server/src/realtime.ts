@@ -50,7 +50,10 @@ function distinctUsers(): PublicUser[] {
 }
 
 function lobbyState(): LobbyState {
-  return { users: distinctUsers(), events: Array.from(events.values()).map((e) => e.meta) };
+  return {
+    users: distinctUsers(),
+    events: Array.from(events.values()).map((e) => ({ ...e.meta, playerCount: e.game.getPlayerCount() })),
+  };
 }
 
 export function registerRealtime(io: Server): void {
@@ -81,10 +84,17 @@ export function registerRealtime(io: Server): void {
         socket.emit(SOCKET_EVENTS.ERROR, { message: "Unknown game type" });
         return;
       }
+      const duplicate = Array.from(events.values()).some((e) => e.meta.gameType === payload.gameType);
+      if (duplicate) {
+        socket.emit(SOCKET_EVENTS.ERROR, {
+          message: `A ${payload.gameType} event is already open — join it from the Join Games tab instead of starting another.`,
+        });
+        return;
+      }
 
       eventCounter += 1;
       const id = `evt-${eventCounter}`;
-      const meta: ActiveEvent = { id, gameType: payload.gameType, startedBy: user.username };
+      const meta: ActiveEvent = { id, gameType: payload.gameType, startedBy: user.username, playerCount: 0 };
       const onEnd = () => endEvent(io, id);
 
       let game: GameInstance;
@@ -152,6 +162,7 @@ export function registerRealtime(io: Server): void {
           entry.game.addParticipant(user, socket.id, colorFor(user.id));
         }
         ack?.({ role: "player", gameType: entry.meta.gameType });
+        io.emit(SOCKET_EVENTS.LOBBY_STATE, lobbyState());
       },
     );
 
@@ -163,6 +174,7 @@ export function registerRealtime(io: Server): void {
         socket.leave(room(eventId));
         socketEventId.delete(socket.id);
       }
+      io.emit(SOCKET_EVENTS.LOBBY_STATE, lobbyState());
     });
 
     socket.on(SOCKET_EVENTS.PONG_INPUT, (payload: { eventId: string; paddleY: number }) => {

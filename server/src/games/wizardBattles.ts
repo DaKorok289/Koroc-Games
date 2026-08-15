@@ -268,8 +268,10 @@ export class WizardBattleGame {
     return {
       status: this.status,
       countdown: this.countdown,
+      // Visibility rules (walls/bushes) only apply once the round is actually playing —
+      // the pre-game roster and post-game results should always show everyone.
       players: Array.from(this.players.values())
-        .filter((p) => !viewer || isVisible(viewer, p))
+        .filter((p) => this.status !== "playing" || !viewer || isVisible(viewer, p))
         .map((p) => ({
           id: p.id,
           username: p.username,
@@ -292,6 +294,10 @@ export class WizardBattleGame {
     for (const player of this.players.values()) {
       this.io.to(player.socketId).emit(this.event, this.getStateFor(player.id));
     }
+  }
+
+  getPlayerCount(): number {
+    return this.players.size;
   }
 
   destroy(): void {

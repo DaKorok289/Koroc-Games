@@ -201,6 +201,10 @@ export class HideAndSeekGame {
     };
   }
 
+  getPlayerCount(): number {
+    return this.players.size;
+  }
+
   destroy(): void {
     this.stopLoop();
     this.stopCountdown();

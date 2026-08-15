@@ -69,7 +69,10 @@ export function Lobby() {
                     return (
                       <div className="game-card" key={event.id}>
                         <h3>{info.label}</h3>
-                        <p>started by {event.startedBy}</p>
+                        <p>
+                          started by {event.startedBy} · {event.playerCount}{" "}
+                          {event.playerCount === 1 ? "player" : "players"} joined
+                        </p>
                         <button className="primary-btn" onClick={() => joinEvent(event.id)} type="button">
                           Join
                         </button>
